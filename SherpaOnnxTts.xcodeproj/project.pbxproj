@@ -8,10 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		B9243D252CD1774100D51C03 /* espeak-ng-data in Resources */ = {isa = PBXBuildFile; fileRef = B9243D242CD1774100D51C03 /* espeak-ng-data */; };
-		B9BD5D542CC847CE00D491E7 /* vits-piper-en_US.py in Resources */ = {isa = PBXBuildFile; fileRef = B9BD5C892CC847CD00D491E7 /* vits-piper-en_US.py */; };
 		B9BD5D582CC847CE00D491E7 /* en_US-joe-medium.onnx in Resources */ = {isa = PBXBuildFile; fileRef = B9BD5AFD2CC847CD00D491E7 /* en_US-joe-medium.onnx */; };
 		B9BD5DD72CC847CE00D491E7 /* tokens.txt in Resources */ = {isa = PBXBuildFile; fileRef = B9BD5C882CC847CD00D491E7 /* tokens.txt */; };
-		B9BD5DE52CC847CE00D491E7 /* vits-piper-en_US.sh in Resources */ = {isa = PBXBuildFile; fileRef = B9BD5C8A2CC847CD00D491E7 /* vits-piper-en_US.sh */; };
 		C917B4E92B0EEF3C005245AC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C917B4E82B0EEF3C005245AC /* Assets.xcassets */; };
 		C917B4EC2B0EEF3C005245AC /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C917B4EB2B0EEF3C005245AC /* Preview Assets.xcassets */; };
 		C9FE9FEA2B0F3754009F1003 /* sherpa-onnx.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C9FE9FE92B0F3754009F1003 /* sherpa-onnx.xcframework */; };
@@ -22,8 +20,6 @@
 		B9243D242CD1774100D51C03 /* espeak-ng-data */ = {isa = PBXFileReference; lastKnownFileType = text; path = "espeak-ng-data"; sourceTree = "<group>"; };
 		B9BD5AFD2CC847CD00D491E7 /* en_US-joe-medium.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; path = "en_US-joe-medium.onnx"; sourceTree = "<group>"; };
 		B9BD5C882CC847CD00D491E7 /* tokens.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = tokens.txt; sourceTree = "<group>"; };
-		B9BD5C892CC847CD00D491E7 /* vits-piper-en_US.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "vits-piper-en_US.py"; sourceTree = "<group>"; };
-		B9BD5C8A2CC847CD00D491E7 /* vits-piper-en_US.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "vits-piper-en_US.sh"; sourceTree = "<group>"; };
 		C917B4E12B0EEF3B005245AC /* SherpaOnnxTts.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SherpaOnnxTts.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C917B4E82B0EEF3C005245AC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C917B4EB2B0EEF3C005245AC /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
@@ -58,8 +54,6 @@
 				B9243D242CD1774100D51C03 /* espeak-ng-data */,
 				B9BD5AFD2CC847CD00D491E7 /* en_US-joe-medium.onnx */,
 				B9BD5C882CC847CD00D491E7 /* tokens.txt */,
-				B9BD5C892CC847CD00D491E7 /* vits-piper-en_US.py */,
-				B9BD5C8A2CC847CD00D491E7 /* vits-piper-en_US.sh */,
 				C917B4E32B0EEF3B005245AC /* SherpaOnnxTts */,
 				C917B4E22B0EEF3B005245AC /* Products */,
 				C9FE9FE82B0F3754009F1003 /* Frameworks */,
@@ -173,10 +167,8 @@
 				C917B4EC2B0EEF3C005245AC /* Preview Assets.xcassets in Resources */,
 				B9243D252CD1774100D51C03 /* espeak-ng-data in Resources */,
 				C917B4E92B0EEF3C005245AC /* Assets.xcassets in Resources */,
-				B9BD5D542CC847CE00D491E7 /* vits-piper-en_US.py in Resources */,
 				B9BD5D582CC847CE00D491E7 /* en_US-joe-medium.onnx in Resources */,
 				B9BD5DD72CC847CE00D491E7 /* tokens.txt in Resources */,
-				B9BD5DE52CC847CE00D491E7 /* vits-piper-en_US.sh in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
