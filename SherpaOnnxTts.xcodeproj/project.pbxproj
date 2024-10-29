@@ -7,45 +7,28 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		B92DCC2B2CD007E6009BA473 /* TTSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92DCC2A2CD007E6009BA473 /* TTSManager.swift */; };
-		B9BD5CE02CC847CE00D491E7 /* MODEL_CARD in Resources */ = {isa = PBXBuildFile; fileRef = B9BD5C872CC847CD00D491E7 /* MODEL_CARD */; };
-		B9BD5D542CC847CE00D491E7 /* vits-piper-en_US.py in Resources */ = {isa = PBXBuildFile; fileRef = B9BD5C892CC847CD00D491E7 /* vits-piper-en_US.py */; };
-		B9BD5D582CC847CE00D491E7 /* en_US-joe-medium.onnx in Resources */ = {isa = PBXBuildFile; fileRef = B9BD5AFD2CC847CD00D491E7 /* en_US-joe-medium.onnx */; };
-		B9BD5DD72CC847CE00D491E7 /* tokens.txt in Resources */ = {isa = PBXBuildFile; fileRef = B9BD5C882CC847CD00D491E7 /* tokens.txt */; };
-		B9BD5DE52CC847CE00D491E7 /* vits-piper-en_US.sh in Resources */ = {isa = PBXBuildFile; fileRef = B9BD5C8A2CC847CD00D491E7 /* vits-piper-en_US.sh */; };
-		B9BD5DF52CC8484200D491E7 /* espeak-ng-data in Resources */ = {isa = PBXBuildFile; fileRef = B9BD5DF42CC8484200D491E7 /* espeak-ng-data */; };
-		C917B4E52B0EEF3B005245AC /* SherpaOnnxTtsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C917B4E42B0EEF3B005245AC /* SherpaOnnxTtsApp.swift */; };
-		C917B4E72B0EEF3B005245AC /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C917B4E62B0EEF3B005245AC /* ContentView.swift */; };
+		B9243D2C2CD17AC100D51C03 /* SherpaOnnxTtsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9243D282CD17AC100D51C03 /* SherpaOnnxTtsApp.swift */; };
 		C917B4E92B0EEF3C005245AC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C917B4E82B0EEF3C005245AC /* Assets.xcassets */; };
 		C917B4EC2B0EEF3C005245AC /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C917B4EB2B0EEF3C005245AC /* Preview Assets.xcassets */; };
-		C9FE9FE52B0F33CD009F1003 /* ViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9FE9FE42B0F33CD009F1003 /* ViewModel.swift */; };
-		C9FE9FE72B0F3620009F1003 /* SherpaOnnx.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9FE9FE62B0F3620009F1003 /* SherpaOnnx.swift */; };
 		C9FE9FEA2B0F3754009F1003 /* sherpa-onnx.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C9FE9FE92B0F3754009F1003 /* sherpa-onnx.xcframework */; };
 		C9FE9FEF2B0F3EFB009F1003 /* onnxruntime.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C9FE9FEB2B0F3785009F1003 /* onnxruntime.xcframework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		B92DCC2A2CD007E6009BA473 /* TTSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSManager.swift; sourceTree = "<group>"; };
-		B9BD5AFD2CC847CD00D491E7 /* en_US-joe-medium.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; path = "en_US-joe-medium.onnx"; sourceTree = "<group>"; };
-		B9BD5C872CC847CD00D491E7 /* MODEL_CARD */ = {isa = PBXFileReference; lastKnownFileType = text; path = MODEL_CARD; sourceTree = "<group>"; };
-		B9BD5C882CC847CD00D491E7 /* tokens.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = tokens.txt; sourceTree = "<group>"; };
-		B9BD5C892CC847CD00D491E7 /* vits-piper-en_US.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "vits-piper-en_US.py"; sourceTree = "<group>"; };
-		B9BD5C8A2CC847CD00D491E7 /* vits-piper-en_US.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "vits-piper-en_US.sh"; sourceTree = "<group>"; };
-		B9BD5DF42CC8484200D491E7 /* espeak-ng-data */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "espeak-ng-data"; sourceTree = "<group>"; };
+		B9243D282CD17AC100D51C03 /* SherpaOnnxTtsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SherpaOnnxTtsApp.swift; sourceTree = "<group>"; };
 		C917B4E12B0EEF3B005245AC /* SherpaOnnxTts.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SherpaOnnxTts.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		C917B4E42B0EEF3B005245AC /* SherpaOnnxTtsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SherpaOnnxTtsApp.swift; sourceTree = "<group>"; };
-		C917B4E62B0EEF3B005245AC /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		C917B4E82B0EEF3C005245AC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C917B4EB2B0EEF3C005245AC /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
-		C9FE9FE42B0F33CD009F1003 /* ViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModel.swift; sourceTree = "<group>"; };
-		C9FE9FE62B0F3620009F1003 /* SherpaOnnx.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = SherpaOnnx.swift; path = "../../../swift-api-examples/SherpaOnnx.swift"; sourceTree = "<group>"; };
 		C9FE9FE92B0F3754009F1003 /* sherpa-onnx.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "sherpa-onnx.xcframework"; path = "../../build-ios/sherpa-onnx.xcframework"; sourceTree = "<group>"; };
 		C9FE9FEB2B0F3785009F1003 /* onnxruntime.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = onnxruntime.xcframework; path = "../../build-ios/ios-onnxruntime/1.17.1/onnxruntime.xcframework"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		B9BD58032CC8403100D491E7 /* Test */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Test; sourceTree = "<group>"; };
-		B9BD5C862CC847CD00D491E7 /* espeak-ng-data */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "espeak-ng-data"; sourceTree = "<group>"; };
+		B9243A302CD175C600D51C03 /* Models */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Models; sourceTree = "<group>"; };
+		B9243A312CD175CF00D51C03 /* Screens */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Screens; sourceTree = "<group>"; };
+		B9243A322CD175D600D51C03 /* Managers */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Managers; sourceTree = "<group>"; };
+		B9243A332CD175DE00D51C03 /* TTS Resources */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = ("Voices/en_US-joe-medium.onnx/espeak-ng-data", ); path = "TTS Resources"; sourceTree = "<group>"; };
+		B9243A352CD1760200D51C03 /* SherpaOnnx */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = SherpaOnnx; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -64,14 +47,6 @@
 		C917B4D82B0EEF3B005245AC = {
 			isa = PBXGroup;
 			children = (
-				B9BD5DF42CC8484200D491E7 /* espeak-ng-data */,
-				B9BD5AFD2CC847CD00D491E7 /* en_US-joe-medium.onnx */,
-				B9BD5C862CC847CD00D491E7 /* espeak-ng-data */,
-				B9BD5C872CC847CD00D491E7 /* MODEL_CARD */,
-				B9BD5C882CC847CD00D491E7 /* tokens.txt */,
-				B9BD5C892CC847CD00D491E7 /* vits-piper-en_US.py */,
-				B9BD5C8A2CC847CD00D491E7 /* vits-piper-en_US.sh */,
-				B9BD58032CC8403100D491E7 /* Test */,
 				C917B4E32B0EEF3B005245AC /* SherpaOnnxTts */,
 				C917B4E22B0EEF3B005245AC /* Products */,
 				C9FE9FE82B0F3754009F1003 /* Frameworks */,
@@ -89,12 +64,13 @@
 		C917B4E32B0EEF3B005245AC /* SherpaOnnxTts */ = {
 			isa = PBXGroup;
 			children = (
-				C9FE9FE62B0F3620009F1003 /* SherpaOnnx.swift */,
-				C9FE9FE42B0F33CD009F1003 /* ViewModel.swift */,
-				B92DCC2A2CD007E6009BA473 /* TTSManager.swift */,
-				C917B4E42B0EEF3B005245AC /* SherpaOnnxTtsApp.swift */,
-				C917B4E62B0EEF3B005245AC /* ContentView.swift */,
+				B9243D282CD17AC100D51C03 /* SherpaOnnxTtsApp.swift */,
 				C917B4E82B0EEF3C005245AC /* Assets.xcassets */,
+				B9243A352CD1760200D51C03 /* SherpaOnnx */,
+				B9243A332CD175DE00D51C03 /* TTS Resources */,
+				B9243A322CD175D600D51C03 /* Managers */,
+				B9243A312CD175CF00D51C03 /* Screens */,
+				B9243A302CD175C600D51C03 /* Models */,
 				C917B4EA2B0EEF3C005245AC /* Preview Content */,
 			);
 			path = SherpaOnnxTts;
@@ -133,7 +109,11 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				B9BD5C862CC847CD00D491E7 /* espeak-ng-data */,
+				B9243A302CD175C600D51C03 /* Models */,
+				B9243A312CD175CF00D51C03 /* Screens */,
+				B9243A322CD175D600D51C03 /* Managers */,
+				B9243A332CD175DE00D51C03 /* TTS Resources */,
+				B9243A352CD1760200D51C03 /* SherpaOnnx */,
 			);
 			name = SherpaOnnxTts;
 			productName = SherpaOnnxTts;
@@ -148,7 +128,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1420;
-				LastUpgradeCheck = 1420;
+				LastUpgradeCheck = 1610;
 				TargetAttributes = {
 					C917B4E02B0EEF3B005245AC = {
 						CreatedOnToolsVersion = 14.2;
@@ -178,14 +158,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B9BD5DF52CC8484200D491E7 /* espeak-ng-data in Resources */,
 				C917B4EC2B0EEF3C005245AC /* Preview Assets.xcassets in Resources */,
 				C917B4E92B0EEF3C005245AC /* Assets.xcassets in Resources */,
-				B9BD5CE02CC847CE00D491E7 /* MODEL_CARD in Resources */,
-				B9BD5D542CC847CE00D491E7 /* vits-piper-en_US.py in Resources */,
-				B9BD5D582CC847CE00D491E7 /* en_US-joe-medium.onnx in Resources */,
-				B9BD5DD72CC847CE00D491E7 /* tokens.txt in Resources */,
-				B9BD5DE52CC847CE00D491E7 /* vits-piper-en_US.sh in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -196,11 +170,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C917B4E72B0EEF3B005245AC /* ContentView.swift in Sources */,
-				C9FE9FE72B0F3620009F1003 /* SherpaOnnx.swift in Sources */,
-				B92DCC2B2CD007E6009BA473 /* TTSManager.swift in Sources */,
-				C9FE9FE52B0F33CD009F1003 /* ViewModel.swift in Sources */,
-				C917B4E52B0EEF3B005245AC /* SherpaOnnxTtsApp.swift in Sources */,
+				B9243D2C2CD17AC100D51C03 /* SherpaOnnxTtsApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -211,6 +181,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -243,6 +214,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -271,6 +243,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -303,6 +276,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;

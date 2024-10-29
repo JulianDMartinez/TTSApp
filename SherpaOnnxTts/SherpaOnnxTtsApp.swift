@@ -9,9 +9,11 @@ import SwiftUI
 
 @main
 struct SherpaOnnxTtsApp: App {
+    @State private var ttsManager = TTSManager()
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(ttsManager: TTSManager())
         }
     }
 }
