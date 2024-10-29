@@ -7,9 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		B9243D252CD1774100D51C03 /* espeak-ng-data in Resources */ = {isa = PBXBuildFile; fileRef = B9243D242CD1774100D51C03 /* espeak-ng-data */; };
-		B9BD5D582CC847CE00D491E7 /* en_US-joe-medium.onnx in Resources */ = {isa = PBXBuildFile; fileRef = B9BD5AFD2CC847CD00D491E7 /* en_US-joe-medium.onnx */; };
-		B9BD5DD72CC847CE00D491E7 /* tokens.txt in Resources */ = {isa = PBXBuildFile; fileRef = B9BD5C882CC847CD00D491E7 /* tokens.txt */; };
+		B9243D2C2CD17AC100D51C03 /* SherpaOnnxTtsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9243D282CD17AC100D51C03 /* SherpaOnnxTtsApp.swift */; };
 		C917B4E92B0EEF3C005245AC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C917B4E82B0EEF3C005245AC /* Assets.xcassets */; };
 		C917B4EC2B0EEF3C005245AC /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C917B4EB2B0EEF3C005245AC /* Preview Assets.xcassets */; };
 		C9FE9FEA2B0F3754009F1003 /* sherpa-onnx.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C9FE9FE92B0F3754009F1003 /* sherpa-onnx.xcframework */; };
@@ -17,9 +15,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		B9243D242CD1774100D51C03 /* espeak-ng-data */ = {isa = PBXFileReference; lastKnownFileType = text; path = "espeak-ng-data"; sourceTree = "<group>"; };
-		B9BD5AFD2CC847CD00D491E7 /* en_US-joe-medium.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; path = "en_US-joe-medium.onnx"; sourceTree = "<group>"; };
-		B9BD5C882CC847CD00D491E7 /* tokens.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = tokens.txt; sourceTree = "<group>"; };
+		B9243D282CD17AC100D51C03 /* SherpaOnnxTtsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SherpaOnnxTtsApp.swift; sourceTree = "<group>"; };
 		C917B4E12B0EEF3B005245AC /* SherpaOnnxTts.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SherpaOnnxTts.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C917B4E82B0EEF3C005245AC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C917B4EB2B0EEF3C005245AC /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
@@ -29,10 +25,10 @@
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B9243A302CD175C600D51C03 /* Models */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Models; sourceTree = "<group>"; };
-		B9243A312CD175CF00D51C03 /* Views */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Views; sourceTree = "<group>"; };
+		B9243A312CD175CF00D51C03 /* Screens */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Screens; sourceTree = "<group>"; };
 		B9243A322CD175D600D51C03 /* Managers */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Managers; sourceTree = "<group>"; };
-		B9243A332CD175DE00D51C03 /* Resources */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Resources; sourceTree = "<group>"; };
-		B9243A352CD1760200D51C03 /* Supporting Files */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "Supporting Files"; sourceTree = "<group>"; };
+		B9243A332CD175DE00D51C03 /* TTS Resources */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = ("Voices/en_US-joe-medium.onnx/espeak-ng-data", ); path = "TTS Resources"; sourceTree = "<group>"; };
+		B9243A352CD1760200D51C03 /* SherpaOnnx */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = SherpaOnnx; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -51,9 +47,6 @@
 		C917B4D82B0EEF3B005245AC = {
 			isa = PBXGroup;
 			children = (
-				B9243D242CD1774100D51C03 /* espeak-ng-data */,
-				B9BD5AFD2CC847CD00D491E7 /* en_US-joe-medium.onnx */,
-				B9BD5C882CC847CD00D491E7 /* tokens.txt */,
 				C917B4E32B0EEF3B005245AC /* SherpaOnnxTts */,
 				C917B4E22B0EEF3B005245AC /* Products */,
 				C9FE9FE82B0F3754009F1003 /* Frameworks */,
@@ -71,11 +64,12 @@
 		C917B4E32B0EEF3B005245AC /* SherpaOnnxTts */ = {
 			isa = PBXGroup;
 			children = (
+				B9243D282CD17AC100D51C03 /* SherpaOnnxTtsApp.swift */,
 				C917B4E82B0EEF3C005245AC /* Assets.xcassets */,
-				B9243A352CD1760200D51C03 /* Supporting Files */,
-				B9243A332CD175DE00D51C03 /* Resources */,
+				B9243A352CD1760200D51C03 /* SherpaOnnx */,
+				B9243A332CD175DE00D51C03 /* TTS Resources */,
 				B9243A322CD175D600D51C03 /* Managers */,
-				B9243A312CD175CF00D51C03 /* Views */,
+				B9243A312CD175CF00D51C03 /* Screens */,
 				B9243A302CD175C600D51C03 /* Models */,
 				C917B4EA2B0EEF3C005245AC /* Preview Content */,
 			);
@@ -116,10 +110,10 @@
 			);
 			fileSystemSynchronizedGroups = (
 				B9243A302CD175C600D51C03 /* Models */,
-				B9243A312CD175CF00D51C03 /* Views */,
+				B9243A312CD175CF00D51C03 /* Screens */,
 				B9243A322CD175D600D51C03 /* Managers */,
-				B9243A332CD175DE00D51C03 /* Resources */,
-				B9243A352CD1760200D51C03 /* Supporting Files */,
+				B9243A332CD175DE00D51C03 /* TTS Resources */,
+				B9243A352CD1760200D51C03 /* SherpaOnnx */,
 			);
 			name = SherpaOnnxTts;
 			productName = SherpaOnnxTts;
@@ -165,10 +159,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C917B4EC2B0EEF3C005245AC /* Preview Assets.xcassets in Resources */,
-				B9243D252CD1774100D51C03 /* espeak-ng-data in Resources */,
 				C917B4E92B0EEF3C005245AC /* Assets.xcassets in Resources */,
-				B9BD5D582CC847CE00D491E7 /* en_US-joe-medium.onnx in Resources */,
-				B9BD5DD72CC847CE00D491E7 /* tokens.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -179,6 +170,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B9243D2C2CD17AC100D51C03 /* SherpaOnnxTtsApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
