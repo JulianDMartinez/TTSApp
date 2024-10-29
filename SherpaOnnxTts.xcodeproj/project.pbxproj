@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		B92DCC2B2CD007E6009BA473 /* TTSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92DCC2A2CD007E6009BA473 /* TTSManager.swift */; };
+		B941ADE32CD1577100AD9AD7 /* SherpaOnnx+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B941ADE22CD1577100AD9AD7 /* SherpaOnnx+Ext.swift */; };
 		B9BD5CE02CC847CE00D491E7 /* MODEL_CARD in Resources */ = {isa = PBXBuildFile; fileRef = B9BD5C872CC847CD00D491E7 /* MODEL_CARD */; };
 		B9BD5D542CC847CE00D491E7 /* vits-piper-en_US.py in Resources */ = {isa = PBXBuildFile; fileRef = B9BD5C892CC847CD00D491E7 /* vits-piper-en_US.py */; };
 		B9BD5D582CC847CE00D491E7 /* en_US-joe-medium.onnx in Resources */ = {isa = PBXBuildFile; fileRef = B9BD5AFD2CC847CD00D491E7 /* en_US-joe-medium.onnx */; };
@@ -26,6 +27,7 @@
 
 /* Begin PBXFileReference section */
 		B92DCC2A2CD007E6009BA473 /* TTSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSManager.swift; sourceTree = "<group>"; };
+		B941ADE22CD1577100AD9AD7 /* SherpaOnnx+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SherpaOnnx+Ext.swift"; sourceTree = "<group>"; };
 		B9BD5AFD2CC847CD00D491E7 /* en_US-joe-medium.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; path = "en_US-joe-medium.onnx"; sourceTree = "<group>"; };
 		B9BD5C872CC847CD00D491E7 /* MODEL_CARD */ = {isa = PBXFileReference; lastKnownFileType = text; path = MODEL_CARD; sourceTree = "<group>"; };
 		B9BD5C882CC847CD00D491E7 /* tokens.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = tokens.txt; sourceTree = "<group>"; };
@@ -90,6 +92,7 @@
 			isa = PBXGroup;
 			children = (
 				C9FE9FE62B0F3620009F1003 /* SherpaOnnx.swift */,
+				B941ADE22CD1577100AD9AD7 /* SherpaOnnx+Ext.swift */,
 				C9FE9FE42B0F33CD009F1003 /* ViewModel.swift */,
 				B92DCC2A2CD007E6009BA473 /* TTSManager.swift */,
 				C917B4E42B0EEF3B005245AC /* SherpaOnnxTtsApp.swift */,
@@ -148,7 +151,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1420;
-				LastUpgradeCheck = 1420;
+				LastUpgradeCheck = 1610;
 				TargetAttributes = {
 					C917B4E02B0EEF3B005245AC = {
 						CreatedOnToolsVersion = 14.2;
@@ -197,6 +200,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C917B4E72B0EEF3B005245AC /* ContentView.swift in Sources */,
+				B941ADE32CD1577100AD9AD7 /* SherpaOnnx+Ext.swift in Sources */,
 				C9FE9FE72B0F3620009F1003 /* SherpaOnnx.swift in Sources */,
 				B92DCC2B2CD007E6009BA473 /* TTSManager.swift in Sources */,
 				C9FE9FE52B0F33CD009F1003 /* ViewModel.swift in Sources */,
@@ -211,6 +215,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -243,6 +248,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -271,6 +277,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -303,6 +310,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;

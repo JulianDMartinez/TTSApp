@@ -7,57 +7,39 @@
 
 import Foundation
 import AVFoundation
+import Combine
 
 @Observable final class TTSManager {
+    // MARK: - Properties
     private var tts = createOfflineTts()
     private var audioEngine = AVAudioEngine()
     private var playerNode = AVAudioPlayerNode()
     private var converterNode: AVAudioMixerNode
-    private let processingQueue = DispatchQueue(label: "com.sherpaonnxtts.processing", qos: .userInitiated)
+    private let processingQueue = DispatchQueue(label: "com.sherpaonnxtts.processing",
+                                              qos: .userInitiated)
+    
     private var currentUtterance: TTSUtterance?
     private var utteranceQueue: [TTSUtterance] = []
     private var processingTask: Task<Void, Never>?
     
     var rate: Float = 1.0
     var speakerId: Int = 0
-    var volume: Float = 1.0
+    var volume: Float = 1.0 {
+        didSet { playerNode.volume = volume }
+    }
     var isPaused: Bool = false
     var isSpeaking: Bool = false
     
-    // Add delegate for utterance progress
-    var delegate: TTSManagerDelegate?
+    weak var delegate: TTSManagerDelegate?
     
+    // MARK: - Initialization
     init() {
         converterNode = AVAudioMixerNode()
         setupAudioEngine()
     }
     
-    private func setupAudioEngine() {
-        // Attach both nodes
-        audioEngine.attach(playerNode)
-        audioEngine.attach(converterNode)
-        
-        // Get the hardware output format
-        let hwFormat = audioEngine.outputNode.outputFormat(forBus: 0)
-        
-        // Create format for TTS output (22.05kHz)
-        let ttsFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
-                                    sampleRate: 22050,
-                                    channels: 1,
-                                    interleaved: false)!
-        
-        // Connect player -> converter -> output with appropriate formats
-        audioEngine.connect(playerNode, to: converterNode, format: ttsFormat)
-        audioEngine.connect(converterNode, to: audioEngine.mainMixerNode, format: hwFormat)
-        
-        do {
-            try audioEngine.start()
-        } catch {
-            print("Failed to start audio engine: \(error)")
-        }
-    }
-    
-    func speak(_ text: String) {
+    // MARK: - Public Methods
+        func speak(_ text: String) {
         // Stop any existing speech and processing
         stopSpeaking()
         processingTask?.cancel()
@@ -85,20 +67,28 @@ import AVFoundation
                                                     sid: self.speakerId, 
                                                     speed: self.rate)
                         
-                        // Create buffer with TTS format
-                        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32,
-                                                 sampleRate: 22050,
-                                                 channels: 1,
-                                                 interleaved: false)!
+                        // Get hardware format for channel count
+                        let hwFormat = self.audioEngine.outputNode.outputFormat(forBus: 0)
+                        
+                        // Create buffer with TTS format matching hardware channels
+                        let format = AVAudioFormat(
+                            commonFormat: .pcmFormatFloat32,
+                            sampleRate: 22050,
+                            channels: hwFormat.channelCount,
+                            interleaved: false)!
                         
                         let frameCount = UInt32(audio.samples.count)
                         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
                         buffer.frameLength = frameCount
                         
-                        // Copy samples to buffer
+                        // Copy samples to all channels
                         let samples = audio.samples.withUnsafeBufferPointer { $0 }
-                        for i in 0..<Int(frameCount) {
-                            buffer.floatChannelData?[0][i] = samples[i]
+                        if let channelData = buffer.floatChannelData {
+                            for channel in 0..<Int(format.channelCount) {
+                                for i in 0..<Int(frameCount) {
+                                    channelData[channel][i] = samples[i]
+                                }
+                            }
                         }
                         
                         // Schedule playback on main thread
@@ -129,13 +119,68 @@ import AVFoundation
         isPaused = false
     }
     
+    func pauseSpeaking() {
+        guard isSpeaking else { return }
+        playerNode.pause()
+        isPaused = true
+    }
+    
+    func continueSpeaking() {
+        guard isPaused else { return }
+        playerNode.play()
+        isPaused = false
+    }
+    
+    // MARK: - Private Methods
+    private func setupAudioEngine() {
+        // Attach both nodes
+        audioEngine.attach(playerNode)
+        audioEngine.attach(converterNode)
+        
+        // Get the hardware output format
+        let hwFormat = audioEngine.outputNode.outputFormat(forBus: 0)
+        
+        // Create format for TTS output (22.05kHz, match hardware channels)
+        let ttsFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 22050,
+            channels: hwFormat.channelCount,
+            interleaved: false)!
+        
+        // Connect player -> converter -> output with appropriate formats
+        audioEngine.connect(playerNode, to: converterNode, format: ttsFormat)
+        audioEngine.connect(converterNode, to: audioEngine.mainMixerNode, format: hwFormat)
+        
+        do {
+            try audioEngine.start()
+        } catch {
+            print("Failed to start audio engine: \(error)")
+        }
+    }
+    
+    private func updatePlaybackRate() {
+        // AVAudioUnitTimePitch.rate ranges from 0.25 to 4.0
+        // Ensure 'rate' is within this range
+        let clampedRate = max(0.25, min(rate, 4.0))
+        print("Playback rate updated to \(clampedRate)")
+    }
+    
+    private func createAudioBuffer(from samples: [Float]) -> AVAudioPCMBuffer? {
+        // This method is now integrated into the 'speak' method for clarity
+        return nil
+    }
+    
     private func scheduleBuffer(_ buffer: AVAudioPCMBuffer, for utterance: TTSUtterance) {
         playerNode.volume = volume
         
         // Schedule buffer with completion handler for utterance tracking
         playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
-            DispatchQueue.main.async {
-                self?.utteranceDidComplete()
+            guard let self = self else { return }
+            
+            Task { @MainActor in
+                self.delegate?.ttsManager(self, didFinishUtterance: utterance)
+                self.utteranceQueue.removeFirst()
+                self.processNextUtterance()
             }
         }
     }
@@ -158,28 +203,39 @@ import AVFoundation
         // Generate audio for the entire utterance
         let audio = tts.generate(text: utterance.text, sid: speakerId, speed: rate)
         
-        // Create buffer with TTS format
-        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32,
-                                 sampleRate: 22050,
-                                 channels: 1,
-                                 interleaved: false)!
+        // Create buffer with main mixer format
+        let mainMixerFormat = audioEngine.mainMixerNode.outputFormat(forBus: 0)
+        let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: mainMixerFormat.sampleRate,
+            channels: mainMixerFormat.channelCount,
+            interleaved: false
+        )!
         
         let frameCount = UInt32(audio.samples.count)
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
         buffer.frameLength = frameCount
         
-        // Copy samples to buffer
+        // Copy samples to all channels
         let samples = audio.samples.withUnsafeBufferPointer { $0 }
-        for i in 0..<Int(frameCount) {
-            buffer.floatChannelData?[0][i] = samples[i]
+        if let channelData = buffer.floatChannelData {
+            for channel in 0..<Int(format.channelCount) {
+                for i in 0..<Int(frameCount) {
+                    channelData[channel][i] = samples[i]
+                }
+            }
         }
         
         playerNode.volume = volume
         
         // Schedule buffer with completion handler for utterance tracking
         playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
-            DispatchQueue.main.async {
-                self?.utteranceDidComplete()
+            guard let self = self else { return }
+            
+            Task { @MainActor in
+                self.delegate?.ttsManager(self, didFinishUtterance: utterance)
+                self.utteranceQueue.removeFirst()
+                self.processNextUtterance()
             }
         }
         
@@ -187,19 +243,9 @@ import AVFoundation
             playerNode.play()
         }
     }
-    
-    func pauseSpeaking() {
-        playerNode.pause()
-        isPaused = true
-    }
-    
-    func continueSpeaking() {
-        playerNode.play()
-        isPaused = false
-    }
 }
 
-// Add TTSUtterance class
+// MARK: - TTSUtterance Class
 class TTSUtterance {
     let text: String
     var range: Range<String.Index>?
@@ -209,7 +255,7 @@ class TTSUtterance {
     }
 }
 
-// Add delegate protocol
+// MARK: - Delegate Protocol
 protocol TTSManagerDelegate: AnyObject {
     func ttsManager(_ manager: TTSManager, didFinishUtterance utterance: TTSUtterance)
     func ttsManager(_ manager: TTSManager, willSpeakUtterance utterance: TTSUtterance)
