@@ -32,6 +32,8 @@ import Combine
     
     weak var delegate: TTSManagerDelegate?
     
+    private var isStopRequested: Bool = false
+    
     // MARK: - Initialization
     init() {
         converterNode = AVAudioMixerNode()
@@ -40,6 +42,9 @@ import Combine
     
     // MARK: - Public Methods
         func speak(_ text: String) {
+        // Reset stop flag
+        isStopRequested = false
+        
         // Stop any existing speech and processing
         stopSpeaking()
         processingTask?.cancel()
@@ -110,13 +115,27 @@ import Combine
     }
     
     func stopSpeaking() {
+        // Set stop flag first
+        isStopRequested = true
+        
+        // Cancel the processing task if it's running
         processingTask?.cancel()
         processingTask = nil
-        playerNode.stop()
-        utteranceQueue.removeAll()
-        currentUtterance = nil
+        
+        // Reset all state before stopping player
         isSpeaking = false
         isPaused = false
+        currentUtterance = nil
+        utteranceQueue.removeAll()
+        
+        // Stop the player node and reset its scheduled buffers
+        playerNode.stop()
+        playerNode.reset()  // This removes any scheduled buffers
+        
+        // Reset the audio engine if needed
+        if !audioEngine.isRunning {
+            try? audioEngine.start()
+        }
     }
     
     func pauseSpeaking() {
@@ -173,26 +192,24 @@ import Combine
     private func scheduleBuffer(_ buffer: AVAudioPCMBuffer, for utterance: TTSUtterance) {
         playerNode.volume = volume
         
-        // Schedule buffer with completion handler for utterance tracking
         playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
-            guard let self = self else { return }
+            guard let self = self, !self.isStopRequested else { return }
             
             Task { @MainActor in
                 self.delegate?.ttsManager(self, didFinishUtterance: utterance)
-                self.utteranceQueue.removeFirst()
+                if !self.utteranceQueue.isEmpty {
+                    self.utteranceQueue.removeFirst()
+                }
                 self.processNextUtterance()
             }
         }
     }
     
-    private func utteranceDidComplete() {
-        delegate?.ttsManager(self, didFinishUtterance: currentUtterance!)
-        utteranceQueue.removeFirst()
-        processNextUtterance()
-    }
-    
     private func processNextUtterance() {
-        guard let utterance = utteranceQueue.first else {
+        // Don't process next utterance if we've stopped speaking
+        guard isSpeaking,
+              !utteranceQueue.isEmpty,
+              let utterance = utteranceQueue.first else {
             isSpeaking = false
             return
         }
@@ -234,7 +251,9 @@ import Combine
             
             Task { @MainActor in
                 self.delegate?.ttsManager(self, didFinishUtterance: utterance)
-                self.utteranceQueue.removeFirst()
+                if !self.utteranceQueue.isEmpty {
+                    self.utteranceQueue.removeFirst()
+                }
                 self.processNextUtterance()
             }
         }
