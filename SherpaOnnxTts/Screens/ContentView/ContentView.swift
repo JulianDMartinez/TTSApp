@@ -8,30 +8,80 @@
 
 import SwiftUI
 import Combine
+import PDFKit
 
 struct ContentView: View {
-    @StateObject private var keyboard = KeyboardResponder()
     @State var ttsManager: TTSManager
     @State private var text: String = ""
     @State private var showAlert: Bool = false
-
+    @State private var showDocumentPicker = false
+    @State private var pdfPages: [String] = []
+    @State private var currentPage = 0
+    @State private var showPDFPicker = false
+    
     var body: some View {
         VStack(spacing: 20) {
             controlsSection
-            textInputSection
+            
+            // Input selection buttons
+            HStack {
+                Button("Text Input") {
+                    ttsManager.inputMode = .text
+                }
+                .buttonStyle(.bordered)
+                
+                Button("PDF Input") {
+                    showPDFPicker = true
+                }
+                .buttonStyle(.bordered)
+            }
+            
+            if ttsManager.inputMode == .text {
+                textInputSection
+            } else if ttsManager.inputMode == .pdf,
+                      let document = ttsManager.pdfDocument {
+                PDFViewer(document: document,
+                         currentPage: currentPage,
+                         spokenText: ttsManager.spokenText,
+                         currentSentence: ttsManager.currentSentence,
+                         currentWord: ttsManager.currentWord,
+                         isTracking: ttsManager.isTracking)
+                    .edgesIgnoringSafeArea(.all)
+            } else {
+                if pdfPages.isEmpty {
+                    Text("Select a PDF file to begin")
+                } else {
+                    Text("Page \(currentPage + 1) of \(pdfPages.count)")
+                    TextEditor(text: .constant(pdfPages[currentPage]))
+                        .font(.body)
+                        .border(Color.black)
+                        .frame(height: 200)
+                }
+            }
+            
             Spacer()
             actionButtons
-                .padding(.bottom, keyboard.currentHeight > 0 ? keyboard.currentHeight : 20)
-                .animation(.easeOut(duration: 0.16), value: keyboard.currentHeight)
         }
         .padding()
-        .alert("Empty Text", isPresented: $showAlert) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text("Please enter some text to speak")
+        .sheet(isPresented: $showDocumentPicker) {
+            DocumentPicker { url in
+                pdfPages = ttsManager.loadPDF(from: url)
+                if !pdfPages.isEmpty {
+                    ttsManager.inputMode = .pdf
+                    ttsManager.speak(pdfPages[currentPage])
+                }
+            }
         }
-        .onTapGesture {
-            hideKeyboard()
+        .sheet(isPresented: $showPDFPicker) {
+            DocumentPicker { url in
+                if let document = PDFDocument(url: url) {
+                    ttsManager.pdfDocument = document
+                    ttsManager.inputMode = .pdf
+                    if let text = document.page(at: 0)?.string {
+                        ttsManager.speak(text, pageNumber: 0)
+                    }
+                }
+            }
         }
     }
     

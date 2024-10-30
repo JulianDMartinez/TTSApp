@@ -8,6 +8,12 @@
 import Foundation
 import AVFoundation
 import Combine
+import PDFKit
+
+enum InputMode {
+    case text
+    case pdf
+}
 
 @Observable final class TTSManager {
     // MARK: - Properties
@@ -34,6 +40,22 @@ import Combine
     
     private var isStopRequested: Bool = false
     
+    private var preprocessingTask: Task<Void, Never>?
+    private var preprocessedBuffers: [(TTSUtterance, AVAudioPCMBuffer)] = []
+    private let maxPreprocessedBuffers = 2 // Keep at most 2 sentences preprocessed
+    private let preprocessingQueue = DispatchQueue(label: "com.sherpaonnxtts.preprocessing",
+                                                qos: .userInitiated)
+    
+    var inputMode: InputMode = .text
+    private let pdfManager = PDFManager()
+    
+    // Add new properties
+    var pdfDocument: PDFDocument?
+    var currentSentence: String = ""
+    var currentWord: String = ""
+    var spokenText: String = ""
+    var isTracking: Bool = false
+    
     // MARK: - Initialization
     init() {
         converterNode = AVAudioMixerNode()
@@ -41,96 +63,220 @@ import Combine
     }
     
     // MARK: - Public Methods
-        func speak(_ text: String) {
-        // Reset stop flag
-        isStopRequested = false
+        func speak(_ text: String, pageNumber: Int? = nil) {
+
         
         // Stop any existing speech and processing
         stopSpeaking()
         processingTask?.cancel()
+        preprocessingTask?.cancel()
+            
+            // Reset stop flag
+            isStopRequested = false
         
-        // Split text into sentences
-        let sentences = text.components(separatedBy: CharacterSet(charactersIn: ".!?"))
+        // Split text into lines first to identify titles
+        let lines = text.components(separatedBy: .newlines)
+        var processedText = ""
+        
+        for (index, line) in lines.enumerated() {
+            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedLine.isEmpty {
+                // If line doesn't end with sentence endings and is followed by more text,
+                // it might be a title - add a special marker
+                if !trimmedLine.hasSuffix(".") && !trimmedLine.hasSuffix("!") && 
+                   !trimmedLine.hasSuffix("?") && index < lines.count - 1 {
+                    processedText += trimmedLine + ".|" // Special marker for titles
+                } else {
+                    processedText += trimmedLine + " "
+                }
+            }
+        }
+        
+        // Split text into sentences, now handling our special title marker
+        let sentences = processedText.components(separatedBy: CharacterSet(charactersIn: ".|!?"))
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         
         guard !sentences.isEmpty else { return }
         
-        processingTask = Task { [weak self] in
+        // Update spoken text tracking
+        spokenText = ""
+        currentSentence = ""
+        currentWord = ""
+        
+        // Start preprocessing with text tracking
+        preprocessingTask = Task { [weak self] in
             guard let self = self else { return }
             
-            for sentence in sentences {
+            for (_, sentence) in sentences.enumerated() {
                 guard !Task.isCancelled else { break }
                 
-                let utterance = TTSUtterance(sentence)
+                while !self.isStopRequested && self.preprocessedBuffers.count >= self.maxPreprocessedBuffers {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
                 
-                // Process utterance on background queue
-                await withCheckedContinuation { continuation in
-                    self.processingQueue.async {
-                        // Generate audio for the utterance
-                        let audio = self.tts.generate(text: utterance.text, 
-                                                    sid: self.speakerId, 
-                                                    speed: self.rate)
-                        
-                        // Get hardware format for channel count
-                        let hwFormat = self.audioEngine.outputNode.outputFormat(forBus: 0)
-                        
-                        // Create buffer with TTS format matching hardware channels
-                        let format = AVAudioFormat(
-                            commonFormat: .pcmFormatFloat32,
-                            sampleRate: 22050,
-                            channels: hwFormat.channelCount,
-                            interleaved: false)!
-                        
-                        let frameCount = UInt32(audio.samples.count)
-                        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
-                        buffer.frameLength = frameCount
-                        
-                        // Copy samples to all channels
-                        let samples = audio.samples.withUnsafeBufferPointer { $0 }
-                        if let channelData = buffer.floatChannelData {
-                            for channel in 0..<Int(format.channelCount) {
-                                for i in 0..<Int(frameCount) {
-                                    channelData[channel][i] = samples[i]
-                                }
-                            }
-                        }
-                        
-                        // Schedule playback on main thread
-                        DispatchQueue.main.async {
-                            self.utteranceQueue.append(utterance)
-                            self.scheduleBuffer(buffer, for: utterance)
-                            
-                            if !self.isSpeaking {
-                                self.isSpeaking = true
-                                self.currentUtterance = utterance
-                                self.playerNode.play()
-                            }
-                            continuation.resume()
+                guard !Task.isCancelled && !self.isStopRequested else { break }
+                
+                let utterance = TTSUtterance(sentence)
+                // Mark if this was a title (ended with our special marker in the original text)
+                utterance.isTitle = processedText.contains(sentence + ".|")
+                
+                let buffer = await self.generateAudioBuffer(for: utterance)
+                
+                if let buffer = buffer {
+                    Task { @MainActor in
+                        self.currentWord = utterance.text
+                        self.preprocessedBuffers.append((utterance, buffer))
+                        if !self.isSpeaking {
+                            self.playNextPreprocessedBuffer()
                         }
                     }
                 }
             }
         }
+        
+        if let pageNumber = pageNumber {
+            pdfManager.setCurrentPage(pageNumber)
+        }
+    }
+    
+    private func generateAudioBuffer(for utterance: TTSUtterance) async -> AVAudioPCMBuffer? {
+        return await withCheckedContinuation { continuation in
+            self.preprocessingQueue.async {
+                let audio = self.tts.generate(text: utterance.text, 
+                                           sid: self.speakerId, 
+                                           speed: self.rate)
+                
+                // Get hardware format for channel count
+                let hwFormat = self.audioEngine.outputNode.outputFormat(forBus: 0)
+                
+                // Create buffer with TTS format matching hardware channels
+                let format = AVAudioFormat(
+                    commonFormat: .pcmFormatFloat32,
+                    sampleRate: 22050,
+                    channels: hwFormat.channelCount,
+                    interleaved: false)!
+                
+                let frameCount = UInt32(audio.samples.count)
+                let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
+                buffer.frameLength = frameCount
+                
+                // Copy samples to all channels
+                let samples = audio.samples.withUnsafeBufferPointer { $0 }
+                if let channelData = buffer.floatChannelData {
+                    for channel in 0..<Int(format.channelCount) {
+                        for i in 0..<Int(frameCount) {
+                            channelData[channel][i] = samples[i]
+                        }
+                    }
+                }
+                
+                continuation.resume(returning: buffer)
+            }
+        }
+    }
+    
+    @MainActor
+    private func playNextPreprocessedBuffer() {
+        guard !preprocessedBuffers.isEmpty else {
+            isSpeaking = false
+            currentUtterance = nil
+            return
+        }
+        
+        let (utterance, buffer) = preprocessedBuffers.removeFirst()
+        currentUtterance = utterance
+        scheduleBuffer(buffer, for: utterance)
+        isSpeaking = true
+        
+        if !playerNode.isPlaying {
+            playerNode.play()
+        }
+    }
+    
+    private func scheduleBuffer(_ buffer: AVAudioPCMBuffer, for utterance: TTSUtterance) {
+        playerNode.volume = volume
+        
+        // Create a silence buffer with appropriate duration
+        let silenceBuffer: AVAudioPCMBuffer?
+        if utterance.isTitle {
+            silenceBuffer = createSilenceBuffer(duration: 0.1)
+        } else if utterance.text.trimmingCharacters(in: .whitespaces).hasSuffix(".") {
+            // Normal sentence pause (0.4 seconds)
+            silenceBuffer = createSilenceBuffer(duration: 1.8)
+        } else {
+            silenceBuffer = nil
+        }
+        
+        // Schedule the main buffer
+        playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+            guard let self = self else { return }
+            
+            // If we have a silence buffer, schedule it
+            if let silenceBuffer = silenceBuffer {
+                self.playerNode.scheduleBuffer(silenceBuffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+                    guard let self = self, !self.isStopRequested else { return }
+                    
+                    Task { @MainActor in
+                        self.delegate?.ttsManager(self, didFinishUtterance: utterance)
+                        self.playNextPreprocessedBuffer()
+                    }
+                }
+            } else {
+                // No silence buffer, proceed immediately
+                Task { @MainActor in
+                    self.delegate?.ttsManager(self, didFinishUtterance: utterance)
+                    self.playNextPreprocessedBuffer()
+                }
+            }
+        }
+    }
+    
+    private func createSilenceBuffer(duration: Double) -> AVAudioPCMBuffer? {
+        let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 22050,
+            channels: audioEngine.outputNode.outputFormat(forBus: 0).channelCount,
+            interleaved: false)!
+        
+        let frameCount = UInt32(duration * format.sampleRate)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            return nil
+        }
+        
+        buffer.frameLength = frameCount
+        
+        // Fill with silence (zeros)
+        if let channelData = buffer.floatChannelData {
+            for channel in 0..<Int(format.channelCount) {
+                for frame in 0..<Int(frameCount) {
+                    channelData[channel][frame] = 0.0
+                }
+            }
+        }
+        
+        return buffer
     }
     
     func stopSpeaking() {
         // Set stop flag first
         isStopRequested = true
         
-        // Cancel the processing task if it's running
+        // Cancel all processing tasks
         processingTask?.cancel()
+        preprocessingTask?.cancel()
         processingTask = nil
+        preprocessingTask = nil
         
-        // Reset all state before stopping player
+        // Reset all state
         isSpeaking = false
         isPaused = false
         currentUtterance = nil
-        utteranceQueue.removeAll()
+        preprocessedBuffers.removeAll()
         
         // Stop the player node and reset its scheduled buffers
         playerNode.stop()
-        playerNode.reset()  // This removes any scheduled buffers
+        playerNode.reset()
         
         // Reset the audio engine if needed
         if !audioEngine.isRunning {
@@ -189,22 +335,6 @@ import Combine
         return nil
     }
     
-    private func scheduleBuffer(_ buffer: AVAudioPCMBuffer, for utterance: TTSUtterance) {
-        playerNode.volume = volume
-        
-        playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
-            guard let self = self, !self.isStopRequested else { return }
-            
-            Task { @MainActor in
-                self.delegate?.ttsManager(self, didFinishUtterance: utterance)
-                if !self.utteranceQueue.isEmpty {
-                    self.utteranceQueue.removeFirst()
-                }
-                self.processNextUtterance()
-            }
-        }
-    }
-    
     private func processNextUtterance() {
         // Don't process next utterance if we've stopped speaking
         guard isSpeaking,
@@ -261,6 +391,10 @@ import Combine
         if !playerNode.isPlaying {
             playerNode.play()
         }
+    }
+    
+    func loadPDF(from url: URL) -> [String] {
+        return pdfManager.loadPDF(from: url)
     }
 }
 
