@@ -87,7 +87,7 @@ import Combine
         preprocessingTask = Task { [weak self] in
             guard let self = self else { return }
             
-            for (index, sentence) in sentences.enumerated() {
+            for (_, sentence) in sentences.enumerated() {
                 guard !Task.isCancelled else { break }
                 
                 while !self.isStopRequested && self.preprocessedBuffers.count >= self.maxPreprocessedBuffers {
