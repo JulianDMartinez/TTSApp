@@ -86,7 +86,7 @@ extension ContentViewModel: TTSManagerDelegate {
         DispatchQueue.main.async {
             self.currentSentence = utterance.text
             // Optionally, reset currentWord or handle sentence-level highlighting
-            self.currentWord = ""
+            self.currentWord = utterance.text
             self.spokenText += utterance.text + " "
             // Enable tracking if needed
             self.isTracking = true
