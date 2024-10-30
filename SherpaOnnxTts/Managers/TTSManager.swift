@@ -87,28 +87,40 @@ enum InputMode {
         // Reset stop flag
         isStopRequested = false
 
-        // Split text into lines first to identify titles
-        let lines = text.components(separatedBy: .newlines)
-        var processedText = ""
+        // Preprocess text to handle line breaks and hyphenated words
+        var processedText = text
 
-        for (index, line) in lines.enumerated() {
-            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmedLine.isEmpty {
-                // If line doesn't end with sentence endings and is followed by more text,
-                // it might be a title - add a special marker
-                if !trimmedLine.hasSuffix(".") && !trimmedLine.hasSuffix("!") &&
-                    !trimmedLine.hasSuffix("?") && index < lines.count - 1 {
-                    processedText += trimmedLine + ".|" // Special marker for titles
-                } else {
-                    processedText += trimmedLine + " "
-                }
-            }
+        // Handle hyphenated words split across lines
+        processedText = processedText.replacingOccurrences(
+            of: "-\n",
+            with: "",
+            options: .regularExpression,
+            range: nil
+        )
+
+        // Replace single line breaks within paragraphs with spaces
+        // Multiple line breaks indicate a new paragraph
+        let paragraphSeparator = "\n\n"
+        processedText = processedText.replacingOccurrences(
+            of: "(?<!\n)\n(?!\n)",
+            with: " ",
+            options: .regularExpression,
+            range: nil
+        )
+
+        // Split text into paragraphs
+        let paragraphs = processedText.components(separatedBy: paragraphSeparator)
+
+        // Now, split paragraphs into sentences using sentence terminators
+        let sentenceTerminators = CharacterSet(charactersIn: ".!?")
+        var sentences: [String] = []
+
+        for paragraph in paragraphs {
+            let paragraphSentences = paragraph.components(separatedBy: sentenceTerminators)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            sentences.append(contentsOf: paragraphSentences)
         }
-
-        // Split text into sentences, now handling our special title marker
-        let sentences = processedText.components(separatedBy: CharacterSet(charactersIn: ".|!?"))
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
 
         guard !sentences.isEmpty else { return }
 
@@ -125,21 +137,17 @@ enum InputMode {
                 guard !Task.isCancelled else { break }
 
                 while !self.isStopRequested && self.preprocessedBuffers.count >= self.maxPreprocessedBuffers {
-                    try? await Task.sleep(nanoseconds: 100000000)
+                    try? await Task.sleep(nanoseconds: 100_000_000)
                 }
 
                 guard !Task.isCancelled && !self.isStopRequested else { break }
 
                 let utterance = TTSUtterance(sentence)
 
-                // Mark if this was a title (ended with our special marker in the original text)
-                utterance.isTitle = processedText.contains(sentence + ".|")
-
                 let buffer = await self.generateAudioBuffer(for: utterance)
 
                 if let buffer = buffer {
                     Task {
-                        self.currentWord = utterance.text
                         self.preprocessedBuffers.append((utterance, buffer))
                         if !self.isSpeaking {
                             self.playNextPreprocessedBuffer()
@@ -214,11 +222,11 @@ enum InputMode {
 
     private func startWordTracking(for utterance: TTSUtterance) {
         wordTrackingDisplayLink?.invalidate()
-        
+
         // Estimate word durations based on word length
         let totalDuration = utterance.duration
         let totalCharacters = utterance.words.reduce(0) { $0 + $1.count }
-        
+
         // Calculate timestamps for each word
         var accumulatedTime: Double = 0.0
         utterance.wordTimestamps = utterance.words.map { word in
@@ -228,10 +236,11 @@ enum InputMode {
             accumulatedTime += wordDuration
             return (word: word, timestamp: timestamp)
         }
-        
+
         audioStartTime = CACurrentMediaTime()
-        
+
         wordTrackingDisplayLink = CADisplayLink(target: self, selector: #selector(updateWordTracking))
+        wordTrackingDisplayLink?.preferredFramesPerSecond = 120
         wordTrackingDisplayLink?.add(to: .main, forMode: .common)
     }
 
@@ -241,29 +250,37 @@ enum InputMode {
             wordTrackingDisplayLink?.invalidate()
             return
         }
-        
+
         let currentTime = CACurrentMediaTime() - audioStartTime
         let totalDuration = utterance.duration
-        
+
         // Ensure we don't exceed the total duration
         if currentTime >= totalDuration {
             wordTrackingDisplayLink?.invalidate()
             return
         }
-        
+
         // Find the word that should be highlighted at the current time
+        var wordFound = false
         for (index, wordInfo) in utterance.wordTimestamps.enumerated() {
             let wordStartTime = wordInfo.timestamp
             let wordEndTime = (index < utterance.wordTimestamps.count - 1) ?
                 utterance.wordTimestamps[index + 1].timestamp : totalDuration
-            
+
             if currentTime >= wordStartTime && currentTime < wordEndTime {
                 if currentWord != wordInfo.word {
                     currentWord = wordInfo.word
                     delegate?.ttsManager(self, willSpeakWord: wordInfo.word)
                 }
+                wordFound = true
                 break
             }
+        }
+
+        // Handle cases where currentTime is before the first word's timestamp
+        if !wordFound && currentTime < utterance.wordTimestamps.first!.timestamp {
+            currentWord = utterance.words.first!
+            delegate?.ttsManager(self, willSpeakWord: currentWord)
         }
     }
 
@@ -272,10 +289,10 @@ enum InputMode {
 
         // Calculate utterance duration
         utterance.duration = Double(buffer.frameLength) / buffer.format.sampleRate
-        
+
         // Start word tracking before playing
         startWordTracking(for: utterance)
-        
+
         // Create a silence buffer with appropriate duration
         let silenceBuffer: AVAudioPCMBuffer?
         if utterance.isTitle {
@@ -309,7 +326,7 @@ enum InputMode {
                             } else {
                                 print("No more utterances in the queue.")
                             }
-                            
+
                             // Start word-level tracking
                             self.startWordTracking(for: utterance)
 
@@ -330,7 +347,7 @@ enum InputMode {
                     } else {
                         print("No more utterances in the queue.")
                     }
-                    
+
                     // Start word-level tracking
                     self.startWordTracking(for: utterance)
 
@@ -371,7 +388,7 @@ enum InputMode {
         // Stop word tracking
         wordTrackingDisplayLink?.invalidate()
         wordTrackingDisplayLink = nil
-        
+
         // Rest of the existing stop implementation
         // Reference existing implementation:
         wordTimer?.invalidate()
@@ -464,20 +481,20 @@ enum InputMode {
 
         // Generate audio for the entire utterance
         let audio = tts.generate(text: utterance.text, sid: speakerId, speed: rate)
-        
+
         // Calculate utterance duration based on sample count and sample rate
         utterance.duration = Double(audio.samples.count) / 22050.0 // Using known sample rate
-        
+
         // Calculate word timings
         let wordsCount = Double(utterance.words.count)
         let timePerWord = utterance.duration / wordsCount
-        
+
         // Create timestamps for each word
         utterance.wordTimestamps = utterance.words.enumerated().map { index, word in
             let timestamp = timePerWord * Double(index)
             return (word: word, timestamp: max(0, timestamp))
         }
-        
+
         // Create and schedule audio buffer
         let mainMixerFormat = audioEngine.mainMixerNode.outputFormat(forBus: 0)
         let format = AVAudioFormat(
@@ -486,25 +503,25 @@ enum InputMode {
             channels: mainMixerFormat.channelCount,
             interleaved: false
         )!
-        
+
         let frameCount = UInt32(audio.samples.count)
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
         buffer.frameLength = frameCount
-        
+
         // Copy samples to buffer
         if let channelData = buffer.floatChannelData {
             audio.samples.withUnsafeBufferPointer { samples in
-                for channel in 0..<Int(format.channelCount) {
-                    for i in 0..<Int(frameCount) {
+                for channel in 0 ..< Int(format.channelCount) {
+                    for i in 0 ..< Int(frameCount) {
                         channelData[channel][i] = samples[i]
                     }
                 }
             }
         }
-        
+
         // Start word tracking before playing
         startWordTracking(for: utterance)
-        
+
         playerNode.volume = volume
         playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             guard let self = self else { return }
@@ -517,7 +534,7 @@ enum InputMode {
                 self.processNextUtterance()
             }
         }
-        
+
         if !playerNode.isPlaying {
             playerNode.play()
         }

@@ -12,19 +12,26 @@ class TTSUtterance {
     let words: [String]
     var wordTimestamps: [(word: String, timestamp: Double)] = []
     var currentWordIndex: Int = 0
-    var range: Range<String.Index>?
     var isTitle: Bool = false
     var pageNumber: Int?
-    var characterRange: NSRange?
     var duration: Double = 0.0
 
     init(_ text: String, pageNumber: Int? = nil) {
         self.text = text
-        self.words = text.components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
+        // Use a regular expression to split text into words, including punctuation attached to words
+        let regexPattern = "[\\w'-]+|[.,!?;:]"
+        let regex = try? NSRegularExpression(pattern: regexPattern, options: [])
+        let matches = regex?.matches(in: text, options: [], range: NSRange(text.startIndex..., in: text)) ?? []
+
+        self.words = matches.compactMap {
+            if let range = Range($0.range, in: text) {
+                return String(text[range])
+            }
+            return nil
+        }
         self.pageNumber = pageNumber
     }
-    
+
     var currentWord: String {
         guard currentWordIndex < words.count else { return "" }
         return words[currentWordIndex]
