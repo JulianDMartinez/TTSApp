@@ -22,29 +22,20 @@ struct PDFViewer: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: PDFView, context: Context) {
-//        print("DEBUG: PDFViewer updating with:")
-//        print("- Current page: \(currentPage)")
-//        print("- Spoken text: '\(spokenText)'")
-//        print("- Current sentence: '\(currentSentence)'")
-//        print("- Current word: '\(currentWord)'")
-
         if let document = uiView.document,
            let page = document.page(at: currentPage) {
-            let highlighter = PDFHighlighter(
+            var highlighter = PDFHighlighter(
                 document: document,
                 currentPageNumber: currentPage,
                 spokenText: spokenText,
                 highlightWord: currentWord
             )
-
-            highlighter.clearHighlights()
-
+            
             let didHighlight = highlighter.highlightTextInDocument(
                 sentence: currentSentence,
                 word: currentWord
             )
-            print("Highlighting result: \(didHighlight)")
-
+            
             if isTracking {
                 let destination = PDFDestination(
                     page: page,

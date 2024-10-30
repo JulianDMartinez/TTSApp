@@ -13,81 +13,74 @@ struct PDFHighlighter {
     let currentPageNumber: Int
     let spokenText: String
     let highlightWord: String
-
-    func clearHighlights() {
-        for pageIndex in 0 ..< document.pageCount {
-            if let page = document.page(at: pageIndex) {
-                let highlight = PDFAnnotationSubtype.highlight.rawValue
-                let annotations = page.annotations.filter { $0.type == String(highlight.dropFirst()) }
-                for annotation in annotations {
-                    page.removeAnnotation(annotation)
-                }
+    
+    private static var currentSentenceText: String?
+    private static var currentSentenceAnnotation: PDFAnnotation?
+    private static var currentWordAnnotation: PDFAnnotation?
+    
+    mutating func clearHighlights() {
+        if let page = document.page(at: currentPageNumber) {
+            PDFHighlighter.currentSentenceAnnotation = nil
+            PDFHighlighter.currentWordAnnotation = nil
+            PDFHighlighter.currentSentenceText = nil
+            
+            let highlight = PDFAnnotationSubtype.highlight.rawValue
+            let annotations = page.annotations.filter { $0.type == String(highlight.dropFirst()) }
+            for annotation in annotations {
+                page.removeAnnotation(annotation)
             }
         }
     }
-
+    
     @discardableResult
-    func highlightTextInDocument(sentence: String, word: String) -> Bool {
+    mutating func highlightTextInDocument(sentence: String, word: String) -> Bool {
         guard !word.isEmpty, let currentPage = document.page(at: currentPageNumber) else {
             return false
         }
-
-        // Clear previous highlights
-        clearHighlights()
-
-        // Find the word in the document
-        if let wordSelection = document.findString(word, withOptions: .caseInsensitive).first {
-            // Highlight just the word
-            highlight(
-                selection: wordSelection,
-                wordSelection: nil,
-                withColor: .systemBlue.withAlphaComponent(0.5),
-                in: currentPage
-            )
-            return true
+        
+        // Find the sentence in the document
+        if let sentenceSelection = document.findString(sentence, withOptions: .caseInsensitive).first {
+            let sentenceBounds = sentenceSelection.bounds(for: currentPage)
+            
+            // Only create new sentence highlight if it's a different sentence
+            if PDFHighlighter.currentSentenceText != sentence {
+                // Clear previous highlights when switching sentences
+                clearHighlights()
+                
+                // Create new sentence highlight
+                let annotation = PDFAnnotation(bounds: sentenceBounds, forType: .highlight, withProperties: nil)
+                annotation.color = .systemGray.withAlphaComponent(0.2)
+                currentPage.addAnnotation(annotation)
+                PDFHighlighter.currentSentenceAnnotation = annotation
+                PDFHighlighter.currentSentenceText = sentence
+            }
+            
+            // Find and highlight the word within the sentence bounds
+            if let wordSelection = document.findString(word, withOptions: .caseInsensitive).first {
+                let wordBounds = wordSelection.bounds(for: currentPage)
+                
+                // Only highlight if the word is within the sentence bounds
+                if sentenceBounds.contains(wordBounds) {
+                    // Remove previous word highlight if it exists
+                    if let oldWordAnnotation = PDFHighlighter.currentWordAnnotation {
+                        currentPage.removeAnnotation(oldWordAnnotation)
+                    }
+                    
+                    // Create new word highlight
+                    let annotation = PDFAnnotation(bounds: wordBounds, forType: .highlight, withProperties: nil)
+                    annotation.color = .systemBlue.withAlphaComponent(0.5)
+                    currentPage.addAnnotation(annotation)
+                    PDFHighlighter.currentWordAnnotation = annotation
+                    
+                    return true
+                }
+            }
+            return true // Return true if sentence is highlighted even if word highlight fails
+        } else {
+            // Clear highlights only if we can't find the sentence
+            clearHighlights()
         }
         
         return false
-    }
-
-    func highlight(
-        selection: PDFSelection,
-        wordSelection: PDFSelection?,
-        withColor color: UIColor,
-        in page: PDFPage
-    ) {
-        let annotations = selection.selectionsByLine().map { lineSelection -> PDFAnnotation in
-            let bounds = lineSelection.bounds(for: page)
-            return PDFAnnotation(bounds: bounds, forType: .highlight, withProperties: nil)
-        }
-        for annotation in annotations {
-            annotation.color = color
-            page.addAnnotation(annotation)
-            if let wordSelection {
-                highlightWordWithinBounds(
-                    highlightWord,
-                    wordSelection: wordSelection,
-                    in: page,
-                    within: annotation.bounds
-                )
-            }
-        }
-    }
-
-    func highlightWordWithinBounds(
-        _: String,
-        wordSelection: PDFSelection,
-        in page: PDFPage,
-        within sentenceBounds: CGRect
-    ) {
-        let wordBounds = wordSelection.bounds(for: page)
-        if sentenceBounds.contains(wordBounds) {
-            highlight(
-                selection: wordSelection,
-                wordSelection: nil,
-                withColor: .systemBlue.withAlphaComponent(0.5),
-                in: page
-            )
-        }
     }
 }
