@@ -101,4 +101,12 @@ extension ContentViewModel: TTSManagerDelegate {
             self.isTracking = false
         }
     }
+
+    func ttsManager(_ manager: TTSManager, willSpeakWord word: String) {
+        print("Will speak word: \(word)")
+        DispatchQueue.main.async {
+            self.currentWord = word
+            self.isTracking = true
+        }
+    }
 }

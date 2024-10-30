@@ -61,6 +61,10 @@ enum InputMode {
     var spokenText: String = ""
     var isTracking: Bool = false
 
+    // Add new property for word timing
+    private var wordTimer: Timer?
+    private var estimatedWordsPerSecond: Double = 3.0 // Adjust based on speech rate
+
     // MARK: - Initialization
     init() {
         converterNode = AVAudioMixerNode()
@@ -121,6 +125,7 @@ enum InputMode {
                 guard !Task.isCancelled && !self.isStopRequested else { break }
 
                 let utterance = TTSUtterance(sentence)
+
                 // Mark if this was a title (ended with our special marker in the original text)
                 utterance.isTitle = processedText.contains(sentence + ".|")
 
@@ -193,12 +198,60 @@ enum InputMode {
 
         let (utterance, buffer) = preprocessedBuffers.removeFirst()
         currentUtterance = utterance
-
         scheduleBuffer(buffer, for: utterance)
         isSpeaking = true
 
         if !playerNode.isPlaying {
             playerNode.play()
+        }
+    }
+
+    private func startWordTracking(for utterance: TTSUtterance) {
+        print("Starting word tracking for '\(utterance.text)'")
+        
+        // Cancel any existing word timer
+        wordTimer?.invalidate()
+        
+        // Ensure that the utterance's words are initialized
+        guard !utterance.words.isEmpty else {
+            print("No words to track in utterance.")
+            return
+        }
+        
+        // Reset the current word index
+        utterance.currentWordIndex = 0
+        
+        // Calculate timing based on word count and speech rate
+        let wordsPerSecond = estimatedWordsPerSecond * Double(rate)
+        let interval = 1.0 / wordsPerSecond
+        
+        // Schedule the timer on the main thread
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            self.wordTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { timer in
+                // Ensure we don't exceed the word count
+                if utterance.currentWordIndex >= utterance.words.count {
+                    timer.invalidate()
+                    self.wordTimer = nil
+                    return
+                }
+                
+                // Update current word
+                let word = utterance.words[utterance.currentWordIndex]
+                self.currentWord = word
+                
+                print("Speaking word: '\(word)'")
+                
+                // Notify delegate of word change
+                self.delegate?.ttsManager(self, willSpeakWord: word)
+                
+                // Increment word index
+                utterance.currentWordIndex += 1
+            }
+            
+            // Add the timer to the main run loop in common modes
+            RunLoop.main.add(self.wordTimer!, forMode: .common)
         }
     }
 
@@ -238,6 +291,9 @@ enum InputMode {
                             } else {
                                 print("No more utterances in the queue.")
                             }
+                            
+                            // Start word-level tracking
+                            self.startWordTracking(for: utterance)
 
                             self.playNextPreprocessedBuffer()
                         }
@@ -256,6 +312,9 @@ enum InputMode {
                     } else {
                         print("No more utterances in the queue.")
                     }
+                    
+                    // Start word-level tracking
+                    self.startWordTracking(for: utterance)
 
                     self.playNextPreprocessedBuffer()
                 }
@@ -291,6 +350,8 @@ enum InputMode {
     }
 
     func stopSpeaking() {
+        wordTimer?.invalidate()
+        wordTimer = nil
         // Set stop flag first
         isStopRequested = true
 
@@ -435,4 +496,5 @@ enum InputMode {
 protocol TTSManagerDelegate: AnyObject {
     func ttsManager(_ manager: TTSManager, didFinishUtterance utterance: TTSUtterance)
     func ttsManager(_ manager: TTSManager, willSpeakUtterance utterance: TTSUtterance)
+    func ttsManager(_ manager: TTSManager, willSpeakWord word: String)
 }

@@ -28,45 +28,26 @@ struct PDFHighlighter {
 
     @discardableResult
     func highlightTextInDocument(sentence: String, word: String) -> Bool {
-//        print("DEBUG: Highlighting request")
-//        print("DEBUG: Sentence: '\(sentence)'")
-//        print("DEBUG: Word: '\(word)'")
-//        print("DEBUG: Spoken text: '\(spokenText)'")
-
-        guard !sentence.isEmpty, let currentPage = document.page(at: currentPageNumber) else {
-            print(
-                "DEBUG: Failed guard - sentence empty: \(sentence.isEmpty), page exists: \(document.page(at: currentPageNumber) != nil)"
-            )
+        guard !word.isEmpty, let currentPage = document.page(at: currentPageNumber) else {
             return false
         }
 
-        var didHighlight = false
-        let spokenSelection = document.findString(spokenText, withOptions: [])
-        print("Found spoken text selections: \(spokenSelection.count)")
+        // Clear previous highlights
+        clearHighlights()
 
-        if let nextWordSelection = document.findString(
-            word,
-            fromSelection: spokenSelection.first,
-            withOptions: []
-        ) {
-            print("Found word selection")
-            let selections = document.findString(sentence, withOptions: .caseInsensitive)
-            print("Found sentence selections: \(selections.count)")
-
-            for selection in selections {
-                let pages = selection.pages
-                for page in pages where page == currentPage {
-                    highlight(
-                        selection: selection,
-                        wordSelection: nextWordSelection,
-                        withColor: .systemBlue.withAlphaComponent(0.2),
-                        in: currentPage
-                    )
-                    didHighlight = true
-                }
-            }
+        // Find the word in the document
+        if let wordSelection = document.findString(word, withOptions: .caseInsensitive).first {
+            // Highlight just the word
+            highlight(
+                selection: wordSelection,
+                wordSelection: nil,
+                withColor: .systemBlue.withAlphaComponent(0.5),
+                in: currentPage
+            )
+            return true
         }
-        return didHighlight
+        
+        return false
     }
 
     func highlight(
