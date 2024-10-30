@@ -65,6 +65,10 @@ enum InputMode {
     private var wordTimer: Timer?
     private var estimatedWordsPerSecond: Double = 3.0 // Adjust based on speech rate
 
+    // Add new properties
+    private var wordTrackingDisplayLink: CADisplayLink?
+    private var audioStartTime: Double = 0
+
     // MARK: - Initialization
     init() {
         converterNode = AVAudioMixerNode()
@@ -207,57 +211,61 @@ enum InputMode {
     }
 
     private func startWordTracking(for utterance: TTSUtterance) {
+        // Cancel any existing tracking
+        wordTrackingDisplayLink?.invalidate()
+        
+        // Calculate word timings based on audio duration
+        let wordsCount = Double(utterance.words.count)
+        let timePerWord = utterance.duration / wordsCount
+        
+        // Create word timestamps
+        utterance.wordTimestamps = utterance.words.enumerated().map { index, word in
+            (word: word, timestamp: timePerWord * Double(index))
+        }
+        
+        // Store audio start time using CACurrentMediaTime
+        audioStartTime = CACurrentMediaTime()
+        
         print("Starting word tracking for '\(utterance.text)'")
         
-        // Cancel any existing word timer
-        wordTimer?.invalidate()
-        
-        // Ensure that the utterance's words are initialized
-        guard !utterance.words.isEmpty else {
-            print("No words to track in utterance.")
+        // Create and configure display link
+        let displayLink = CADisplayLink(target: self, selector: #selector(updateWordTracking))
+        displayLink.add(to: .main, forMode: .common)
+        self.wordTrackingDisplayLink = displayLink
+    }
+
+    @objc private func updateWordTracking() {
+        guard let utterance = currentUtterance,
+              !utterance.wordTimestamps.isEmpty else {
+            print("UpdateWordTracking: No utterance or empty timestamps")
+            wordTrackingDisplayLink?.invalidate()
             return
         }
         
-        // Reset the current word index
-        utterance.currentWordIndex = 0
+        let currentTime = CACurrentMediaTime() - audioStartTime
         
-        // Calculate timing based on word count and speech rate
-        let wordsPerSecond = estimatedWordsPerSecond * Double(rate)
-        let interval = 1.0 / wordsPerSecond
+        print("UpdateWordTracking: Current time: \(currentTime)")
+        print("UpdateWordTracking: Available timestamps: \(utterance.wordTimestamps.map { "\($0.word): \($0.timestamp)" }.joined(separator: ", "))")
         
-        // Schedule the timer on the main thread
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            
-            self.wordTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { timer in
-                // Ensure we don't exceed the word count
-                if utterance.currentWordIndex >= utterance.words.count {
-                    timer.invalidate()
-                    self.wordTimer = nil
-                    return
-                }
-                
-                // Update current word
-                let word = utterance.words[utterance.currentWordIndex]
-                self.currentWord = word
-                
-                print("Speaking word: '\(word)'")
-                
-                // Notify delegate of word change
-                self.delegate?.ttsManager(self, willSpeakWord: word)
-                
-                // Increment word index
-                utterance.currentWordIndex += 1
+        // Find the last word with a timestamp less than or equal to currentTime
+        if let currentWordInfo = utterance.wordTimestamps.last(where: { $0.timestamp <= currentTime }) {
+            if currentWord != currentWordInfo.word {
+                currentWord = currentWordInfo.word
+                print("UpdateWordTracking: Switching to word: \(currentWord) at time \(currentTime)")
+                delegate?.ttsManager(self, willSpeakWord: currentWordInfo.word)
             }
-            
-            // Add the timer to the main run loop in common modes
-            RunLoop.main.add(self.wordTimer!, forMode: .common)
         }
     }
 
     private func scheduleBuffer(_ buffer: AVAudioPCMBuffer, for utterance: TTSUtterance) {
         playerNode.volume = volume
 
+        // Calculate utterance duration
+        utterance.duration = Double(buffer.frameLength) / buffer.format.sampleRate
+        
+        // Start word tracking before playing
+        startWordTracking(for: utterance)
+        
         // Create a silence buffer with appropriate duration
         let silenceBuffer: AVAudioPCMBuffer?
         if utterance.isTitle {
@@ -350,6 +358,12 @@ enum InputMode {
     }
 
     func stopSpeaking() {
+        // Stop word tracking
+        wordTrackingDisplayLink?.invalidate()
+        wordTrackingDisplayLink = nil
+        
+        // Rest of the existing stop implementation
+        // Reference existing implementation:
         wordTimer?.invalidate()
         wordTimer = nil
         // Set stop flag first

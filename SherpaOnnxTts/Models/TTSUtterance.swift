@@ -10,11 +10,13 @@ import Foundation
 class TTSUtterance {
     let text: String
     let words: [String]
+    var wordTimestamps: [(word: String, timestamp: Double)] = []
     var currentWordIndex: Int = 0
     var range: Range<String.Index>?
     var isTitle: Bool = false
     var pageNumber: Int?
     var characterRange: NSRange?
+    var duration: Double = 0.0
 
     init(_ text: String, pageNumber: Int? = nil) {
         self.text = text
