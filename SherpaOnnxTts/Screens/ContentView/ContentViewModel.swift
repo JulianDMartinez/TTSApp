@@ -21,28 +21,28 @@ class ContentViewModel {
     var inputMode: InputMode = .text
     var isSpeaking: Bool = false
     var isPaused: Bool = false
-    
+
     // MARK: - TTS Manager
     var ttsManager: TTSManager
-    
+
     init() {
-        self.ttsManager = TTSManager()
-        self.ttsManager.delegate = self
+        ttsManager = TTSManager()
+        ttsManager.delegate = self
     }
-    
+
     // MARK: - Additional Methods
-    
+
     func speakText(_ text: String) {
         ttsManager.speak(text)
     }
-    
+
     func speakPage(_ pageNumber: Int) {
         guard let document = pdfDocument else { return }
         if let page = document.page(at: pageNumber), let text = page.string {
             ttsManager.speak(text, pageNumber: pageNumber)
         }
     }
-    
+
     func loadPDF(from url: URL) {
         pdfPages = ttsManager.loadPDF(from: url)
         if !pdfPages.isEmpty {
@@ -50,7 +50,7 @@ class ContentViewModel {
             speakPage(currentPage)
         }
     }
-    
+
     func loadPDFDocument(from url: URL) {
         if let document = PDFDocument(url: url) {
             pdfDocument = document
@@ -60,17 +60,17 @@ class ContentViewModel {
             }
         }
     }
-    
+
     func pauseSpeaking() {
         ttsManager.pauseSpeaking()
         isPaused = true
     }
-    
+
     func continueSpeaking() {
         ttsManager.continueSpeaking()
         isPaused = false
     }
-    
+
     func stopSpeaking() {
         ttsManager.stopSpeaking()
         isSpeaking = false
@@ -80,7 +80,7 @@ class ContentViewModel {
 
 extension ContentViewModel: TTSManagerDelegate {
     // MARK: - TTSManagerDelegate Methods
-    
+
     func ttsManager(_ manager: TTSManager, willSpeakUtterance utterance: TTSUtterance) {
         print("Will speak utterance: \(utterance.text)")
         DispatchQueue.main.async {
@@ -92,7 +92,7 @@ extension ContentViewModel: TTSManagerDelegate {
             self.isTracking = true
         }
     }
-    
+
     func ttsManager(_ manager: TTSManager, didFinishUtterance utterance: TTSUtterance) {
         DispatchQueue.main.async {
             // Handle post-utterance logic, such as moving to the next sentence
@@ -102,4 +102,3 @@ extension ContentViewModel: TTSManagerDelegate {
         }
     }
 }
-    

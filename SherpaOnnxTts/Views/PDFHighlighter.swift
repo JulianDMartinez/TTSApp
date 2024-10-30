@@ -32,21 +32,27 @@ struct PDFHighlighter {
 //        print("DEBUG: Sentence: '\(sentence)'")
 //        print("DEBUG: Word: '\(word)'")
 //        print("DEBUG: Spoken text: '\(spokenText)'")
-        
+
         guard !sentence.isEmpty, let currentPage = document.page(at: currentPageNumber) else {
-            print("DEBUG: Failed guard - sentence empty: \(sentence.isEmpty), page exists: \(document.page(at: currentPageNumber) != nil)")
+            print(
+                "DEBUG: Failed guard - sentence empty: \(sentence.isEmpty), page exists: \(document.page(at: currentPageNumber) != nil)"
+            )
             return false
         }
 
         var didHighlight = false
         let spokenSelection = document.findString(spokenText, withOptions: [])
         print("Found spoken text selections: \(spokenSelection.count)")
-        
-        if let nextWordSelection = document.findString(word, fromSelection: spokenSelection.first, withOptions: []) {
+
+        if let nextWordSelection = document.findString(
+            word,
+            fromSelection: spokenSelection.first,
+            withOptions: []
+        ) {
             print("Found word selection")
             let selections = document.findString(sentence, withOptions: .caseInsensitive)
             print("Found sentence selections: \(selections.count)")
-            
+
             for selection in selections {
                 let pages = selection.pages
                 for page in pages where page == currentPage {

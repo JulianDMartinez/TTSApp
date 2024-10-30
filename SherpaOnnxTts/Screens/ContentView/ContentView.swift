@@ -5,9 +5,9 @@
 //  Created by fangjun on 2023/11/23.
 //
 
-import SwiftUI
 import Combine
 import PDFKit
+import SwiftUI
 
 struct ContentView: View {
     @State private var viewModel = ContentViewModel()
@@ -15,35 +15,37 @@ struct ContentView: View {
     @State private var showAlert: Bool = false
     @State private var showDocumentPicker = false
     @State private var showPDFPicker = false
-    
+
     var body: some View {
         VStack(spacing: 20) {
             controlsSection
-            
+
             // Input selection buttons
             HStack {
                 Button("Text Input") {
                     viewModel.inputMode = .text
                 }
                 .buttonStyle(.bordered)
-                
+
                 Button("PDF Input") {
                     showPDFPicker = true
                 }
                 .buttonStyle(.bordered)
             }
-            
+
             if viewModel.inputMode == .text {
                 textInputSection
             } else if viewModel.inputMode == .pdf,
                       let document = viewModel.pdfDocument {
-                PDFViewer(document: document,
-                          currentPage: viewModel.currentPage,
-                          spokenText: viewModel.spokenText,
-                          currentSentence: viewModel.currentSentence,
-                          currentWord: viewModel.currentWord,
-                          isTracking: viewModel.isTracking)
-                    .edgesIgnoringSafeArea(.all)
+                PDFViewer(
+                    document: document,
+                    currentPage: viewModel.currentPage,
+                    spokenText: viewModel.spokenText,
+                    currentSentence: viewModel.currentSentence,
+                    currentWord: viewModel.currentWord,
+                    isTracking: viewModel.isTracking
+                )
+                .edgesIgnoringSafeArea(.all)
             } else {
                 if viewModel.pdfPages.isEmpty {
                     Text("Select a PDF file to begin")
@@ -55,7 +57,7 @@ struct ContentView: View {
                         .frame(height: 200)
                 }
             }
-            
+
             Spacer()
             actionButtons
         }
@@ -71,46 +73,49 @@ struct ContentView: View {
             }
         }
         .alert(isPresented: $showAlert) {
-            Alert(title: Text("Empty Text"), message: Text("Please enter some text to speak."), dismissButton: .default(Text("OK")))
+            Alert(
+                title: Text("Empty Text"),
+                message: Text("Please enter some text to speak."),
+                dismissButton: .default(Text("OK"))
+            )
         }
-        .onChange(of: viewModel.ttsManager.isSpeaking) { oldValue, newValue in
+        .onChange(of: viewModel.ttsManager.isSpeaking) { _, _ in
             // Update local state if needed
         }
-
     }
-    
+
     private var controlsSection: some View {
         VStack(spacing: 12) {
             rateControl
             volumeControl
         }
     }
-    
+
     private var rateControl: some View {
         VStack {
             Text("Rate")
-            Slider(value: $viewModel.ttsManager.rate, in: 0.5...2.0) {
+            Slider(value: $viewModel.ttsManager.rate, in: 0.5 ... 2.0) {
                 Text("Rate")
             }
             .padding([.horizontal])
         }
     }
-    
+
     private var volumeControl: some View {
         VStack {
             Text("Volume")
-            Slider(value: $viewModel.ttsManager.volume, in: 0...1) {
+            Slider(value: $viewModel.ttsManager.volume, in: 0 ... 1) {
                 Text("Volume")
             }
             .padding([.horizontal])
         }
     }
-    
+
     private var textInputSection: some View {
         VStack(alignment: .leading) {
             Text("Please input your text below")
                 .padding([.trailing, .top, .bottom])
-            
+
             TextEditor(text: $text)
                 .font(.body)
                 .opacity(text.isEmpty ? 0.25 : 1)
@@ -119,11 +124,11 @@ struct ContentView: View {
                 .frame(height: 200)
         }
     }
-    
+
     private var actionButtons: some View {
         HStack {
             Spacer()
-            
+
             Button("Speak") {
                 let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if trimmedText.isEmpty {
@@ -135,7 +140,7 @@ struct ContentView: View {
             }
             .buttonStyle(.borderedProminent)
             .accessibilityIdentifier("speakButton")
-            
+
             if viewModel.ttsManager.isSpeaking {
                 Button(viewModel.ttsManager.isPaused ? "Continue" : "Pause") {
                     if viewModel.ttsManager.isPaused {
@@ -146,7 +151,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("pauseContinueButton")
-                
+
                 Button("Stop") {
                     viewModel.stopSpeaking()
                 }
@@ -177,10 +182,10 @@ final class KeyboardResponder: ObservableObject {
                 }
                 return 0
             }
-        
+
         let willHide = NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)
             .map { _ -> CGFloat in 0 }
-        
+
         Publishers.Merge(willShow, willHide)
             .subscribe(on: RunLoop.main)
             .assign(to: \.currentHeight, on: self)
@@ -191,9 +196,14 @@ final class KeyboardResponder: ObservableObject {
 // MARK: - Hide Keyboard Extension
 
 #if canImport(UIKit)
-extension View {
-    func hideKeyboard() {
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    extension View {
+        func hideKeyboard() {
+            UIApplication.shared.sendAction(
+                #selector(UIResponder.resignFirstResponder),
+                to: nil,
+                from: nil,
+                for: nil
+            )
+        }
     }
-}
 #endif

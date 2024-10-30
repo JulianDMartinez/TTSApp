@@ -8,7 +8,7 @@
 import SwiftUI
 
 @main
-struct SherpaOnnxTtsApp: App {    
+struct SherpaOnnxTtsApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
