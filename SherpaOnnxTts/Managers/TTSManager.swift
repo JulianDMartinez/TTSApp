@@ -69,6 +69,8 @@ enum InputMode {
     private var wordTrackingDisplayLink: CADisplayLink?
     private var audioStartTime: Double = 0
 
+    private let wordHighlightLeadTime: Double = 0.2 // Adjust the lead time as needed
+
     // MARK: - Initialization
     init() {
         converterNode = AVAudioMixerNode()
@@ -222,7 +224,7 @@ enum InputMode {
         utterance.wordTimestamps = utterance.words.map { word in
             let proportion = Double(word.count) / Double(totalCharacters)
             let wordDuration = totalDuration * proportion
-            let timestamp = accumulatedTime
+            let timestamp = max(0, accumulatedTime - wordHighlightLeadTime)
             accumulatedTime += wordDuration
             return (word: word, timestamp: timestamp)
         }
@@ -230,7 +232,6 @@ enum InputMode {
         audioStartTime = CACurrentMediaTime()
         
         wordTrackingDisplayLink = CADisplayLink(target: self, selector: #selector(updateWordTracking))
-        wordTrackingDisplayLink?.preferredFramesPerSecond = 60
         wordTrackingDisplayLink?.add(to: .main, forMode: .common)
     }
 

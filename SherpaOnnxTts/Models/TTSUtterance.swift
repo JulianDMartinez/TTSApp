@@ -20,8 +20,7 @@ class TTSUtterance {
 
     init(_ text: String, pageNumber: Int? = nil) {
         self.text = text
-        // Split text into words, preserving punctuation
-        self.words = text.components(separatedBy: .whitespaces)
+        self.words = text.components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
         self.pageNumber = pageNumber
     }
