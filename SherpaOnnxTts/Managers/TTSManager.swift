@@ -8,6 +8,12 @@
 import Foundation
 import AVFoundation
 import Combine
+import PDFKit
+
+enum InputMode {
+    case text
+    case pdf
+}
 
 @Observable final class TTSManager {
     // MARK: - Properties
@@ -40,6 +46,16 @@ import Combine
     private let preprocessingQueue = DispatchQueue(label: "com.sherpaonnxtts.preprocessing",
                                                 qos: .userInitiated)
     
+    var inputMode: InputMode = .text
+    private let pdfManager = PDFManager()
+    
+    // Add new properties
+    var pdfDocument: PDFDocument?
+    var currentSentence: String = ""
+    var currentWord: String = ""
+    var spokenText: String = ""
+    var isTracking: Bool = false
+    
     // MARK: - Initialization
     init() {
         converterNode = AVAudioMixerNode()
@@ -47,7 +63,7 @@ import Combine
     }
     
     // MARK: - Public Methods
-        func speak(_ text: String) {
+        func speak(_ text: String, pageNumber: Int? = nil) {
 
         
         // Stop any existing speech and processing
@@ -83,7 +99,12 @@ import Combine
         
         guard !sentences.isEmpty else { return }
         
-        // Start preprocessing task with title awareness
+        // Update spoken text tracking
+        spokenText = ""
+        currentSentence = ""
+        currentWord = ""
+        
+        // Start preprocessing with text tracking
         preprocessingTask = Task { [weak self] in
             guard let self = self else { return }
             
@@ -104,6 +125,7 @@ import Combine
                 
                 if let buffer = buffer {
                     Task { @MainActor in
+                        self.currentWord = utterance.text
                         self.preprocessedBuffers.append((utterance, buffer))
                         if !self.isSpeaking {
                             self.playNextPreprocessedBuffer()
@@ -111,6 +133,10 @@ import Combine
                     }
                 }
             }
+        }
+        
+        if let pageNumber = pageNumber {
+            pdfManager.setCurrentPage(pageNumber)
         }
     }
     
@@ -365,6 +391,10 @@ import Combine
         if !playerNode.isPlaying {
             playerNode.play()
         }
+    }
+    
+    func loadPDF(from url: URL) -> [String] {
+        return pdfManager.loadPDF(from: url)
     }
 }
 
