@@ -124,7 +124,7 @@ enum InputMode {
                 let buffer = await self.generateAudioBuffer(for: utterance)
                 
                 if let buffer = buffer {
-                    Task { @MainActor in
+                    Task {
                         self.currentWord = utterance.text
                         self.preprocessedBuffers.append((utterance, buffer))
                         if !self.isSpeaking {
@@ -176,7 +176,6 @@ enum InputMode {
         }
     }
     
-    @MainActor
     private func playNextPreprocessedBuffer() {
         guard !preprocessedBuffers.isEmpty else {
             isSpeaking = false
@@ -186,6 +185,7 @@ enum InputMode {
         
         let (utterance, buffer) = preprocessedBuffers.removeFirst()
         currentUtterance = utterance
+        
         scheduleBuffer(buffer, for: utterance)
         isSpeaking = true
         
@@ -217,15 +217,37 @@ enum InputMode {
                 self.playerNode.scheduleBuffer(silenceBuffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
                     guard let self = self, !self.isStopRequested else { return }
                     
-                    Task { @MainActor in
+                    Task {
                         self.delegate?.ttsManager(self, didFinishUtterance: utterance)
+                        print("Finished playing '\(utterance.text)'")
+                        
+                        // Access the next utterance
+                        if let nextUtterance = self.preprocessedBuffers.first?.0 {
+                            print("Next utterance: '\(nextUtterance.text)'")
+                            self.delegate?.ttsManager(self, willSpeakUtterance: nextUtterance)
+                            // You can perform additional actions with nextUtterance here
+                        } else {
+                            print("No more utterances in the queue.")
+                        }
+                        
                         self.playNextPreprocessedBuffer()
                     }
                 }
             } else {
                 // No silence buffer, proceed immediately
-                Task { @MainActor in
+                Task {
                     self.delegate?.ttsManager(self, didFinishUtterance: utterance)
+                    print("Finished playing '\(utterance.text)'")
+                    
+                    // Access the next utterance
+                    if let nextUtterance = self.preprocessedBuffers.first?.0 {
+                        print("Next utterance: '\(nextUtterance.text)'")
+                        self.delegate?.ttsManager(self, willSpeakUtterance: nextUtterance)
+                        // You can perform additional actions with nextUtterance here
+                    } else {
+                        print("No more utterances in the queue.")
+                    }
+                    
                     self.playNextPreprocessedBuffer()
                 }
             }
@@ -379,7 +401,7 @@ enum InputMode {
         playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             guard let self = self else { return }
             
-            Task { @MainActor in
+            Task {
                 self.delegate?.ttsManager(self, didFinishUtterance: utterance)
                 if !self.utteranceQueue.isEmpty {
                     self.utteranceQueue.removeFirst()

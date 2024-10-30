@@ -16,20 +16,21 @@ struct PDFViewer: UIViewRepresentable {
         pdfView.autoScales = true
         pdfView.displayMode = .singlePage
         pdfView.displayDirection = .vertical
-        
-        // Important: Enable interaction for annotations
-        pdfView.isUserInteractionEnabled = true
+        pdfView.backgroundColor = .white
+        pdfView.pageShadowsEnabled = true
         return pdfView
     }
     
     func updateUIView(_ uiView: PDFView, context: Context) {
-        print("DEBUG: PDFViewer updating with:")
-        print("- Current page: \(currentPage)")
-        print("- Spoken text length: \(spokenText.count)")
-        print("- Current sentence length: \(currentSentence.count)")
-        print("- Current word length: \(currentWord.count)")
+//        print("DEBUG: PDFViewer updating with:")
+//        print("- Current page: \(currentPage)")
+//        print("- Spoken text: '\(spokenText)'")
+//        print("- Current sentence: '\(currentSentence)'")
+//        print("- Current word: '\(currentWord)'")
         
-        if let page = document.page(at: currentPage) {
+        if let document = uiView.document,
+           let page = document.page(at: currentPage) {
+            
             let highlighter = PDFHighlighter(
                 document: document,
                 currentPageNumber: currentPage,
@@ -37,17 +38,14 @@ struct PDFViewer: UIViewRepresentable {
                 highlightWord: currentWord
             )
             
-            // Clear existing highlights
             highlighter.clearHighlights()
             
-            // Add new highlights and log result
             let didHighlight = highlighter.highlightTextInDocument(
                 sentence: currentSentence,
                 word: currentWord
             )
             print("Highlighting result: \(didHighlight)")
             
-            // Handle page tracking
             if isTracking {
                 let destination = PDFDestination(
                     page: page,
@@ -58,13 +56,5 @@ struct PDFViewer: UIViewRepresentable {
                 }
             }
         }
-    }
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-    
-    class Coordinator {
-        // Add coordinator implementation if needed
     }
 }

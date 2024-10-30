@@ -28,10 +28,10 @@ struct PDFHighlighter {
 
     @discardableResult
     func highlightTextInDocument(sentence: String, word: String) -> Bool {
-        print("DEBUG: Highlighting request")
-        print("DEBUG: Sentence: '\(sentence)'")
-        print("DEBUG: Word: '\(word)'")
-        print("DEBUG: Spoken text: '\(spokenText)'")
+//        print("DEBUG: Highlighting request")
+//        print("DEBUG: Sentence: '\(sentence)'")
+//        print("DEBUG: Word: '\(word)'")
+//        print("DEBUG: Spoken text: '\(spokenText)'")
         
         guard !sentence.isEmpty, let currentPage = document.page(at: currentPageNumber) else {
             print("DEBUG: Failed guard - sentence empty: \(sentence.isEmpty), page exists: \(document.page(at: currentPageNumber) != nil)")

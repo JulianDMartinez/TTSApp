@@ -4,19 +4,16 @@
 //
 //  Created by fangjun on 2023/11/23.
 //
-// Text-to-speech with Next-gen Kaldi on iOS without Internet connection
 
 import SwiftUI
 import Combine
 import PDFKit
 
 struct ContentView: View {
-    @State var ttsManager: TTSManager
+    @State private var viewModel = ContentViewModel()
     @State private var text: String = ""
     @State private var showAlert: Bool = false
     @State private var showDocumentPicker = false
-    @State private var pdfPages: [String] = []
-    @State private var currentPage = 0
     @State private var showPDFPicker = false
     
     var body: some View {
@@ -26,7 +23,7 @@ struct ContentView: View {
             // Input selection buttons
             HStack {
                 Button("Text Input") {
-                    ttsManager.inputMode = .text
+                    viewModel.inputMode = .text
                 }
                 .buttonStyle(.bordered)
                 
@@ -36,23 +33,23 @@ struct ContentView: View {
                 .buttonStyle(.bordered)
             }
             
-            if ttsManager.inputMode == .text {
+            if viewModel.inputMode == .text {
                 textInputSection
-            } else if ttsManager.inputMode == .pdf,
-                      let document = ttsManager.pdfDocument {
+            } else if viewModel.inputMode == .pdf,
+                      let document = viewModel.pdfDocument {
                 PDFViewer(document: document,
-                         currentPage: currentPage,
-                         spokenText: ttsManager.spokenText,
-                         currentSentence: ttsManager.currentSentence,
-                         currentWord: ttsManager.currentWord,
-                         isTracking: ttsManager.isTracking)
+                          currentPage: viewModel.currentPage,
+                          spokenText: viewModel.spokenText,
+                          currentSentence: viewModel.currentSentence,
+                          currentWord: viewModel.currentWord,
+                          isTracking: viewModel.isTracking)
                     .edgesIgnoringSafeArea(.all)
             } else {
-                if pdfPages.isEmpty {
+                if viewModel.pdfPages.isEmpty {
                     Text("Select a PDF file to begin")
                 } else {
-                    Text("Page \(currentPage + 1) of \(pdfPages.count)")
-                    TextEditor(text: .constant(pdfPages[currentPage]))
+                    Text("Page \(viewModel.currentPage + 1) of \(viewModel.pdfPages.count)")
+                    TextEditor(text: .constant(viewModel.pdfPages[viewModel.currentPage]))
                         .font(.body)
                         .border(Color.black)
                         .frame(height: 200)
@@ -65,24 +62,21 @@ struct ContentView: View {
         .padding()
         .sheet(isPresented: $showDocumentPicker) {
             DocumentPicker { url in
-                pdfPages = ttsManager.loadPDF(from: url)
-                if !pdfPages.isEmpty {
-                    ttsManager.inputMode = .pdf
-                    ttsManager.speak(pdfPages[currentPage])
-                }
+                viewModel.loadPDF(from: url)
             }
         }
         .sheet(isPresented: $showPDFPicker) {
             DocumentPicker { url in
-                if let document = PDFDocument(url: url) {
-                    ttsManager.pdfDocument = document
-                    ttsManager.inputMode = .pdf
-                    if let text = document.page(at: 0)?.string {
-                        ttsManager.speak(text, pageNumber: 0)
-                    }
-                }
+                viewModel.loadPDFDocument(from: url)
             }
         }
+        .alert(isPresented: $showAlert) {
+            Alert(title: Text("Empty Text"), message: Text("Please enter some text to speak."), dismissButton: .default(Text("OK")))
+        }
+        .onChange(of: viewModel.ttsManager.isSpeaking) { oldValue, newValue in
+            // Update local state if needed
+        }
+
     }
     
     private var controlsSection: some View {
@@ -95,18 +89,20 @@ struct ContentView: View {
     private var rateControl: some View {
         VStack {
             Text("Rate")
-            Slider(value: $ttsManager.rate, in: 0.5...2.0) {
+            Slider(value: $viewModel.ttsManager.rate, in: 0.5...2.0) {
                 Text("Rate")
             }
+            .padding([.horizontal])
         }
     }
     
     private var volumeControl: some View {
         VStack {
             Text("Volume")
-            Slider(value: $ttsManager.volume, in: 0...1) {
+            Slider(value: $viewModel.ttsManager.volume, in: 0...1) {
                 Text("Volume")
             }
+            .padding([.horizontal])
         }
     }
     
@@ -134,25 +130,25 @@ struct ContentView: View {
                     showAlert = true
                     return
                 }
-                ttsManager.speak(trimmedText)
+                viewModel.speakText(trimmedText)
                 hideKeyboard()
             }
             .buttonStyle(.borderedProminent)
             .accessibilityIdentifier("speakButton")
             
-            if ttsManager.isSpeaking {
-                Button(ttsManager.isPaused ? "Continue" : "Pause") {
-                    if ttsManager.isPaused {
-                        ttsManager.continueSpeaking()
+            if viewModel.ttsManager.isSpeaking {
+                Button(viewModel.ttsManager.isPaused ? "Continue" : "Pause") {
+                    if viewModel.ttsManager.isPaused {
+                        viewModel.continueSpeaking()
                     } else {
-                        ttsManager.pauseSpeaking()
+                        viewModel.pauseSpeaking()
                     }
                 }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("pauseContinueButton")
                 
                 Button("Stop") {
-                    ttsManager.stopSpeaking()
+                    viewModel.stopSpeaking()
                 }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("stopButton")
@@ -163,7 +159,7 @@ struct ContentView: View {
 
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
-        ContentView(ttsManager: TTSManager())
+        ContentView()
     }
 }
 
