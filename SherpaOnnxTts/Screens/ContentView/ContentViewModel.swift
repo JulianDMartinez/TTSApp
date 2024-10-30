@@ -82,31 +82,24 @@ extension ContentViewModel: TTSManagerDelegate {
     // MARK: - TTSManagerDelegate Methods
 
     func ttsManager(_ manager: TTSManager, willSpeakUtterance utterance: TTSUtterance) {
-        print("Will speak utterance: \(utterance.text)")
         DispatchQueue.main.async {
             self.currentSentence = utterance.text
-            // Optionally, reset currentWord or handle sentence-level highlighting
-            self.currentWord = utterance.text
+            self.currentWord = ""
             self.spokenText += utterance.text + " "
-            // Enable tracking if needed
             self.isTracking = true
         }
     }
 
     func ttsManager(_ manager: TTSManager, didFinishUtterance utterance: TTSUtterance) {
         DispatchQueue.main.async {
-            // Handle post-utterance logic, such as moving to the next sentence
-            // For example, you might update the currentPage if reading a PDF
-            // Or reset highlights
             self.isTracking = false
+            self.currentWord = ""
         }
     }
 
     func ttsManager(_ manager: TTSManager, willSpeakWord word: String) {
-        print("Will speak word: \(word)")
         DispatchQueue.main.async {
             self.currentWord = word
-            self.isTracking = true
         }
     }
 }

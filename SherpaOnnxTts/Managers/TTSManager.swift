@@ -211,48 +211,57 @@ enum InputMode {
     }
 
     private func startWordTracking(for utterance: TTSUtterance) {
-        // Cancel any existing tracking
         wordTrackingDisplayLink?.invalidate()
         
-        // Calculate word timings based on audio duration
-        let wordsCount = Double(utterance.words.count)
-        let timePerWord = utterance.duration / wordsCount
+        // Estimate word durations based on word length
+        let totalDuration = utterance.duration
+        let totalCharacters = utterance.words.reduce(0) { $0 + $1.count }
         
-        // Create word timestamps
-        utterance.wordTimestamps = utterance.words.enumerated().map { index, word in
-            (word: word, timestamp: timePerWord * Double(index))
+        // Calculate timestamps for each word
+        var accumulatedTime: Double = 0.0
+        utterance.wordTimestamps = utterance.words.map { word in
+            let proportion = Double(word.count) / Double(totalCharacters)
+            let wordDuration = totalDuration * proportion
+            let timestamp = accumulatedTime
+            accumulatedTime += wordDuration
+            return (word: word, timestamp: timestamp)
         }
         
-        // Store audio start time using CACurrentMediaTime
         audioStartTime = CACurrentMediaTime()
         
-        print("Starting word tracking for '\(utterance.text)'")
-        
-        // Create and configure display link
-        let displayLink = CADisplayLink(target: self, selector: #selector(updateWordTracking))
-        displayLink.add(to: .main, forMode: .common)
-        self.wordTrackingDisplayLink = displayLink
+        wordTrackingDisplayLink = CADisplayLink(target: self, selector: #selector(updateWordTracking))
+        wordTrackingDisplayLink?.preferredFramesPerSecond = 60
+        wordTrackingDisplayLink?.add(to: .main, forMode: .common)
     }
 
     @objc private func updateWordTracking() {
         guard let utterance = currentUtterance,
               !utterance.wordTimestamps.isEmpty else {
-            print("UpdateWordTracking: No utterance or empty timestamps")
             wordTrackingDisplayLink?.invalidate()
             return
         }
         
         let currentTime = CACurrentMediaTime() - audioStartTime
+        let totalDuration = utterance.duration
         
-        print("UpdateWordTracking: Current time: \(currentTime)")
-        print("UpdateWordTracking: Available timestamps: \(utterance.wordTimestamps.map { "\($0.word): \($0.timestamp)" }.joined(separator: ", "))")
+        // Ensure we don't exceed the total duration
+        if currentTime >= totalDuration {
+            wordTrackingDisplayLink?.invalidate()
+            return
+        }
         
-        // Find the last word with a timestamp less than or equal to currentTime
-        if let currentWordInfo = utterance.wordTimestamps.last(where: { $0.timestamp <= currentTime }) {
-            if currentWord != currentWordInfo.word {
-                currentWord = currentWordInfo.word
-                print("UpdateWordTracking: Switching to word: \(currentWord) at time \(currentTime)")
-                delegate?.ttsManager(self, willSpeakWord: currentWordInfo.word)
+        // Find the word that should be highlighted at the current time
+        for (index, wordInfo) in utterance.wordTimestamps.enumerated() {
+            let wordStartTime = wordInfo.timestamp
+            let wordEndTime = (index < utterance.wordTimestamps.count - 1) ?
+                utterance.wordTimestamps[index + 1].timestamp : totalDuration
+            
+            if currentTime >= wordStartTime && currentTime < wordEndTime {
+                if currentWord != wordInfo.word {
+                    currentWord = wordInfo.word
+                    delegate?.ttsManager(self, willSpeakWord: wordInfo.word)
+                }
+                break
             }
         }
     }
@@ -444,10 +453,7 @@ enum InputMode {
     }
 
     private func processNextUtterance() {
-        // Don't process next utterance if we've stopped speaking
-        guard isSpeaking,
-              !utteranceQueue.isEmpty,
-              let utterance = utteranceQueue.first else {
+        guard isSpeaking, let utterance = utteranceQueue.first else {
             isSpeaking = false
             return
         }
@@ -457,8 +463,21 @@ enum InputMode {
 
         // Generate audio for the entire utterance
         let audio = tts.generate(text: utterance.text, sid: speakerId, speed: rate)
-
-        // Create buffer with main mixer format
+        
+        // Calculate utterance duration based on sample count and sample rate
+        utterance.duration = Double(audio.samples.count) / 22050.0 // Using known sample rate
+        
+        // Calculate word timings
+        let wordsCount = Double(utterance.words.count)
+        let timePerWord = utterance.duration / wordsCount
+        
+        // Create timestamps for each word
+        utterance.wordTimestamps = utterance.words.enumerated().map { index, word in
+            let timestamp = timePerWord * Double(index)
+            return (word: word, timestamp: max(0, timestamp))
+        }
+        
+        // Create and schedule audio buffer
         let mainMixerFormat = audioEngine.mainMixerNode.outputFormat(forBus: 0)
         let format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -466,28 +485,30 @@ enum InputMode {
             channels: mainMixerFormat.channelCount,
             interleaved: false
         )!
-
+        
         let frameCount = UInt32(audio.samples.count)
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
         buffer.frameLength = frameCount
-
-        // Copy samples to all channels
-        let samples = audio.samples.withUnsafeBufferPointer { $0 }
+        
+        // Copy samples to buffer
         if let channelData = buffer.floatChannelData {
-            for channel in 0 ..< Int(format.channelCount) {
-                for i in 0 ..< Int(frameCount) {
-                    channelData[channel][i] = samples[i]
+            audio.samples.withUnsafeBufferPointer { samples in
+                for channel in 0..<Int(format.channelCount) {
+                    for i in 0..<Int(frameCount) {
+                        channelData[channel][i] = samples[i]
+                    }
                 }
             }
         }
-
+        
+        // Start word tracking before playing
+        startWordTracking(for: utterance)
+        
         playerNode.volume = volume
-
-        // Schedule buffer with completion handler for utterance tracking
         playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             guard let self = self else { return }
-
-            Task {
+            Task { @MainActor in
+                self.wordTrackingDisplayLink?.invalidate()
                 self.delegate?.ttsManager(self, didFinishUtterance: utterance)
                 if !self.utteranceQueue.isEmpty {
                     self.utteranceQueue.removeFirst()
@@ -495,7 +516,7 @@ enum InputMode {
                 self.processNextUtterance()
             }
         }
-
+        
         if !playerNode.isPlaying {
             playerNode.play()
         }

@@ -22,29 +22,24 @@ struct PDFViewer: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: PDFView, context: Context) {
-        if let document = uiView.document,
-           let page = document.page(at: currentPage) {
-            var highlighter = PDFHighlighter(
-                document: document,
-                currentPageNumber: currentPage,
-                spokenText: spokenText,
-                highlightWord: currentWord
-            )
-            
-            let didHighlight = highlighter.highlightTextInDocument(
-                sentence: currentSentence,
-                word: currentWord
-            )
-            
-            if isTracking {
-                let destination = PDFDestination(
-                    page: page,
-                    at: CGPoint(x: 0, y: page.bounds(for: .mediaBox).height)
-                )
-                UIView.animate(withDuration: 0.3) {
-                    uiView.go(to: destination)
-                }
-            }
-        }
+        guard let document = uiView.document,
+              let page = document.page(at: currentPage) else { return }
+
+        var highlighter = PDFHighlighter(
+            document: document,
+            currentPageNumber: currentPage,
+            spokenText: spokenText,
+            highlightWord: currentWord
+        )
+        
+        let didHighlight = highlighter.highlightTextInDocument(
+            sentence: currentSentence,
+            word: currentWord
+        )
+        
+        // Scroll to the word annotation if needed
+//        if isTracking, let wordAnnotation = PDFHighlighter.currentWordAnnotation {
+//            uiView.go(to: wordAnnotation)
+//        }
     }
 }
