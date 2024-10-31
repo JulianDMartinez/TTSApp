@@ -32,7 +32,6 @@ struct PDFHighlighter {
 
     mutating func highlightLinesInDocument(lineTexts: [String], word: String) -> Bool {
         guard let currentPage = document.page(at: currentPageNumber) else {
-            print("❌ Invalid page number")
             return false
         }
 

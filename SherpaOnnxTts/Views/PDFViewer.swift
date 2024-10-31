@@ -16,12 +16,7 @@ struct PDFViewer: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: PDFView, context: Context) {
-        print("\n🔄 PDFViewer update")
-        print("Current lines count: \(currentLinesOriginal.count)")
-        print("Current word: \"\(currentWord)\"")
-
         guard let document = uiView.document else {
-            print("❌ No document")
             return
         }
 
@@ -31,11 +26,9 @@ struct PDFViewer: UIViewRepresentable {
             highlightWord: currentWord
         )
 
-        let didHighlight = highlighter.highlightLinesInDocument(
+        _ = highlighter.highlightLinesInDocument(
             lineTexts: currentLinesOriginal,
             word: currentWord
         )
-
-        print("✅ Highlight result: \(didHighlight)")
     }
 }
