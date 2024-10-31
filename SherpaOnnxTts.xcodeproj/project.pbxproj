@@ -27,7 +27,7 @@
 		B9243A302CD175C600D51C03 /* Models */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Models; sourceTree = "<group>"; };
 		B9243A312CD175CF00D51C03 /* Screens */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Screens; sourceTree = "<group>"; };
 		B9243A322CD175D600D51C03 /* Managers */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Managers; sourceTree = "<group>"; };
-		B9243A332CD175DE00D51C03 /* TTS Resources */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = ("Voices/en_US-joe-medium.onnx/espeak-ng-data", ); path = "TTS Resources"; sourceTree = "<group>"; };
+		B9243A332CD175DE00D51C03 /* TTS Resources */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = ("Voices/en_US-joe-medium/espeak-ng-data", ); path = "TTS Resources"; sourceTree = "<group>"; };
 		B9243A352CD1760200D51C03 /* SherpaOnnx */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = SherpaOnnx; sourceTree = "<group>"; };
 		B9243D892CD2717B00D51C03 /* Views */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Views; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
