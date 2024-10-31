@@ -9,8 +9,8 @@ import Foundation
 import NaturalLanguage
 
 class TTSUtterance {
-    let originalText: String  // Original text as it appears in PDF
-    let text: String         // Processed text for TTS
+    let originalTexts: [String]  // Array of original texts as they appear in PDF
+    let text: String            // Processed text for TTS
     let words: [String]
     var wordTimestamps: [(word: String, timestamp: Double)] = []
     var currentWordIndex: Int = 0
@@ -18,8 +18,8 @@ class TTSUtterance {
     var pageNumber: Int?
     var duration: Double = 0.0
 
-    init(originalText: String, processedText: String, pageNumber: Int? = nil) {
-        self.originalText = originalText
+    init(originalTexts: [String], processedText: String, pageNumber: Int? = nil) {
+        self.originalTexts = originalTexts
         self.text = processedText
         
         // Initialize word tokenizer
@@ -40,14 +40,14 @@ class TTSUtterance {
         self.pageNumber = pageNumber
         
         // Detect if this is a title based on characteristics
-        let trimmedText = originalText.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.isTitle = trimmedText
-            .split(separator: "\n")
-            .count == 1 && // Single line
-            !trimmedText.contains(".") && // No periods
-            trimmedText.count < 100 && // Reasonable title length
-            !trimmedText.hasSuffix("?") && // Not a question
-            !trimmedText.hasSuffix("!") // Not an exclamation
+        self.isTitle = originalTexts.allSatisfy { text in
+            let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmedText.split(separator: "\n").count == 1 && 
+                   !trimmedText.contains(".") && 
+                   trimmedText.count < 100 && 
+                   !trimmedText.hasSuffix("?") && 
+                   !trimmedText.hasSuffix("!")
+        }
     }
 
     var currentWord: String {

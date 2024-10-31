@@ -84,11 +84,11 @@ extension ContentViewModel: TTSManagerDelegate {
 
     func ttsManager(_ manager: TTSManager, willSpeakUtterance utterance: TTSUtterance) {
         print("\n📢 Will speak utterance")
-        print("Original text: \"\(utterance.originalText)\"")
+        print("Original texts: \"\(utterance.originalTexts.joined(separator: "\n"))\"")
         print("Processed text: \"\(utterance.text)\"")
         
         DispatchQueue.main.async {
-            self.currentSentenceOriginal = utterance.originalText
+            self.currentSentenceOriginal = utterance.originalTexts.first ?? ""
             self.currentSentence = utterance.text
             self.currentWord = ""
             self.spokenText += utterance.text + " "

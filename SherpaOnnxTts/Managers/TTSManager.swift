@@ -112,8 +112,8 @@ enum InputMode {
                 guard !Task.isCancelled && !self.isStopRequested else { break }
                 
                 // Find the original text segment that corresponds to this processed sentence
-                let originalSentence = findOriginalSentence(processed: sentence, in: originalText)
-                let utterance = TTSUtterance(originalText: originalSentence, processedText: sentence, pageNumber: pageNumber)
+                let originalSentences = findOriginalSentences(processed: sentence, in: originalText)
+                let utterance = TTSUtterance(originalTexts: originalSentences, processedText: sentence, pageNumber: pageNumber)
                 
                 if let buffer = await self.generateAudioBuffer(for: utterance) {
                     Task {
@@ -533,11 +533,11 @@ enum InputMode {
         return sentences
     }
 
-    private func findOriginalSentence(processed: String, in originalText: String) -> String {
-        print("\n🔄 Finding original sentence")
+    private func findOriginalSentences(processed: String, in originalText: String) -> [String] {
+        print("\n🔄 Finding original sentences")
         print("Processed: \"\(processed)\"")
         print("Original text length: \(originalText.count) characters")
-
+        
         // Remove extra whitespace and normalize for comparison
         let normalizedProcessed = processed.trimmingCharacters(in: .whitespacesAndNewlines)
                                          .components(separatedBy: .whitespacesAndNewlines)
@@ -547,8 +547,7 @@ enum InputMode {
         let sentenceTokenizer = NLTokenizer(unit: .sentence)
         sentenceTokenizer.string = originalText
         
-        var bestMatch = processed
-        var bestMatchScore = 0
+        var matchingSentences: [(sentence: String, score: Int)] = []
         
         sentenceTokenizer.enumerateTokens(in: originalText.startIndex..<originalText.endIndex) { range, _ in
             let originalSentence = String(originalText[range])
@@ -562,16 +561,19 @@ enum InputMode {
             let score = calculateSimilarityScore(between: normalizedProcessed, and: normalizedOriginal)
             print("Similarity score: \(score)")
             
-            if score > bestMatchScore {
-                bestMatchScore = score
-                bestMatch = originalSentence
-                print("✅ New best match found!")
+            if score > 0 {
+                matchingSentences.append((originalSentence, score))
+                print("✅ Match found with score: \(score)")
             }
             return true
         }
         
-        print("🎯 Final match: \"\(bestMatch)\"")
-        return bestMatch
+        // Sort by score and convert to array of sentences
+        let sortedSentences = matchingSentences.sorted { $0.score > $1.score }
+        let result = sortedSentences.map { $0.sentence }
+        
+        print("🎯 Found \(result.count) matching sentences")
+        return result
     }
 
     private func calculateSimilarityScore(between str1: String, and str2: String) -> Int {

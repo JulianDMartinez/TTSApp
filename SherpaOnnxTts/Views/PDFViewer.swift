@@ -4,7 +4,7 @@ import PDFKit
 struct PDFViewer: UIViewRepresentable {
     let document: PDFDocument
     let currentPage: Int
-    let currentLineOriginal: String
+    let currentLinesOriginal: [String]
     let currentWord: String
 
     func makeUIView(context: Context) -> PDFView {
@@ -17,7 +17,7 @@ struct PDFViewer: UIViewRepresentable {
 
     func updateUIView(_ uiView: PDFView, context: Context) {
         print("\n🔄 PDFViewer update")
-        print("Current line: \"\(currentLineOriginal)\"")
+        print("Current lines count: \(currentLinesOriginal.count)")
         print("Current word: \"\(currentWord)\"")
 
         guard let document = uiView.document else {
@@ -31,8 +31,8 @@ struct PDFViewer: UIViewRepresentable {
             highlightWord: currentWord
         )
 
-        let didHighlight = highlighter.highlightLineInDocument(
-            lineText: currentLineOriginal,
+        let didHighlight = highlighter.highlightLinesInDocument(
+            lineTexts: currentLinesOriginal,
             word: currentWord
         )
 
