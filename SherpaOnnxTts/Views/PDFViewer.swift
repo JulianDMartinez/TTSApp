@@ -1,30 +1,23 @@
-import PDFKit
 import SwiftUI
-import UIKit
+import PDFKit
 
 struct PDFViewer: UIViewRepresentable {
     let document: PDFDocument
     let currentPage: Int
-    let spokenText: String
-    let currentSentence: String
-    let currentSentenceOriginal: String
+    let currentLineOriginal: String
     let currentWord: String
-    let isTracking: Bool
 
     func makeUIView(context: Context) -> PDFView {
         let pdfView = PDFView()
-        pdfView.document = document
+        pdfView.displayMode = .singlePageContinuous
         pdfView.autoScales = true
-        pdfView.displayMode = .singlePage
-        pdfView.displayDirection = .vertical
-        pdfView.backgroundColor = .white
-        pdfView.pageShadowsEnabled = true
+        pdfView.document = document
         return pdfView
     }
 
     func updateUIView(_ uiView: PDFView, context: Context) {
         print("\n🔄 PDFViewer update")
-        print("Current line: \"\(currentSentenceOriginal)\"")
+        print("Current line: \"\(currentLineOriginal)\"")
         print("Current word: \"\(currentWord)\"")
 
         guard let document = uiView.document else {
@@ -39,7 +32,7 @@ struct PDFViewer: UIViewRepresentable {
         )
 
         let didHighlight = highlighter.highlightLineInDocument(
-            lineText: currentSentenceOriginal,
+            lineText: currentLineOriginal,
             word: currentWord
         )
 

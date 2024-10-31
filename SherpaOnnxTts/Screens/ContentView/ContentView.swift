@@ -40,11 +40,8 @@ struct ContentView: View {
                 PDFViewer(
                     document: document,
                     currentPage: viewModel.currentPage,
-                    spokenText: viewModel.spokenText,
-                    currentSentence: viewModel.currentSentence,
-                    currentSentenceOriginal: viewModel.currentSentenceOriginal,
-                    currentWord: viewModel.currentWord,
-                    isTracking: viewModel.isTracking
+                    currentLineOriginal: viewModel.currentSentenceOriginal,
+                    currentWord: viewModel.currentWord
                 )
                 .edgesIgnoringSafeArea(.all)
             } else {

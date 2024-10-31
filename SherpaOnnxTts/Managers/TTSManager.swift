@@ -70,7 +70,7 @@ enum InputMode {
     private var wordTrackingDisplayLink: CADisplayLink?
     private var audioStartTime: Double = 0
 
-    private let wordHighlightLeadTime: Double = 0.2 // Adjust the lead time as needed
+    private let wordHighlightLeadTime: Double = 0.05 // Adjust the lead time as needed
 
     // MARK: - Initialization
     init() {
