@@ -9,6 +9,7 @@ import AVFoundation
 import Combine
 import Foundation
 import PDFKit
+import NaturalLanguage
 
 enum InputMode {
     case text
@@ -83,70 +84,35 @@ enum InputMode {
         stopSpeaking()
         processingTask?.cancel()
         preprocessingTask?.cancel()
-
+        
         // Reset stop flag
         isStopRequested = false
-
-        // Preprocess text to handle line breaks and hyphenated words
-        var processedText = text
-
-        // Handle hyphenated words split across lines
-        processedText = processedText.replacingOccurrences(
-            of: "-\n",
-            with: "",
-            options: .regularExpression,
-            range: nil
-        )
-
-        // Replace single line breaks within paragraphs with spaces
-        // Multiple line breaks indicate a new paragraph
-        let paragraphSeparator = "\n\n"
-        processedText = processedText.replacingOccurrences(
-            of: "(?<!\n)\n(?!\n)",
-            with: " ",
-            options: .regularExpression,
-            range: nil
-        )
-
-        // Split text into paragraphs
-        let paragraphs = processedText.components(separatedBy: paragraphSeparator)
-
-        // Now, split paragraphs into sentences using sentence terminators
-        let sentenceTerminators = CharacterSet(charactersIn: ".!?")
-        var sentences: [String] = []
-
-        for paragraph in paragraphs {
-            let paragraphSentences = paragraph.components(separatedBy: sentenceTerminators)
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            sentences.append(contentsOf: paragraphSentences)
-        }
-
+        
+        // Preprocess text into sentences
+        let sentences = preprocessText(text)
         guard !sentences.isEmpty else { return }
-
-        // Update spoken text tracking
+        
+        // Reset tracking variables
         spokenText = ""
         currentSentence = ""
         currentWord = ""
-
+        
         // Start preprocessing with text tracking
         preprocessingTask = Task { [weak self] in
             guard let self = self else { return }
-
-            for (_, sentence) in sentences.enumerated() {
+            
+            for sentence in sentences {
                 guard !Task.isCancelled else { break }
-
+                
                 while !self.isStopRequested && self.preprocessedBuffers.count >= self.maxPreprocessedBuffers {
                     try? await Task.sleep(nanoseconds: 100_000_000)
                 }
-
+                
                 guard !Task.isCancelled && !self.isStopRequested else { break }
-
-                let utterance = TTSUtterance(sentence)
-
-                let buffer = await self.generateAudioBuffer(for: utterance)
-
-                if let buffer = buffer {
+                
+                let utterance = TTSUtterance(sentence, pageNumber: pageNumber)
+                
+                if let buffer = await self.generateAudioBuffer(for: utterance) {
                     Task {
                         self.preprocessedBuffers.append((utterance, buffer))
                         if !self.isSpeaking {
@@ -156,7 +122,7 @@ enum InputMode {
                 }
             }
         }
-
+        
         if let pageNumber = pageNumber {
             pdfManager.setCurrentPage(pageNumber)
         }
@@ -286,71 +252,70 @@ enum InputMode {
 
     private func scheduleBuffer(_ buffer: AVAudioPCMBuffer, for utterance: TTSUtterance) {
         playerNode.volume = volume
-
+        
         // Calculate utterance duration
         utterance.duration = Double(buffer.frameLength) / buffer.format.sampleRate
-
+        
         // Start word tracking before playing
         startWordTracking(for: utterance)
-
-        // Create a silence buffer with appropriate duration
+        
+        // Create silence buffers with appropriate durations
         let silenceBuffer: AVAudioPCMBuffer?
+        
+        // Check for different pause conditions
         if utterance.isTitle {
-            silenceBuffer = createSilenceBuffer(duration: 0.1)
+            // Longer pause after titles (0.8 seconds)
+            silenceBuffer = createSilenceBuffer(duration: 0.8)
+        } else if utterance.text.contains("\n\n") {
+            // Double line break pause (0.6 seconds)
+            silenceBuffer = createSilenceBuffer(duration: 0.6)
         } else if utterance.text.trimmingCharacters(in: .whitespaces).hasSuffix(".") {
             // Normal sentence pause (0.4 seconds)
-            silenceBuffer = createSilenceBuffer(duration: 1.8)
+            silenceBuffer = createSilenceBuffer(duration: 0.4)
+        } else if utterance.text.trimmingCharacters(in: .whitespaces).hasSuffix("\n") {
+            // Single line break pause (0.3 seconds)
+            silenceBuffer = createSilenceBuffer(duration: 0.3)
         } else {
-            silenceBuffer = nil
+            // Short pause for other breaks (0.2 seconds)
+            silenceBuffer = createSilenceBuffer(duration: 0.2)
         }
-
+        
         // Schedule the main buffer
         playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             guard let self = self else { return }
-
+            
             // If we have a silence buffer, schedule it
             if let silenceBuffer = silenceBuffer {
-                self.playerNode
-                    .scheduleBuffer(silenceBuffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
-                        guard let self = self, !self.isStopRequested else { return }
-
-                        Task {
-                            self.delegate?.ttsManager(self, didFinishUtterance: utterance)
-                            print("Finished playing '\(utterance.text)'")
-
-                            // Access the next utterance
-                            if let nextUtterance = self.preprocessedBuffers.first?.0 {
-                                print("Next utterance: '\(nextUtterance.text)'")
-                                self.delegate?.ttsManager(self, willSpeakUtterance: nextUtterance)
-                                // You can perform additional actions with nextUtterance here
-                            } else {
-                                print("No more utterances in the queue.")
-                            }
-
-                            // Start word-level tracking
-                            self.startWordTracking(for: utterance)
-
-                            self.playNextPreprocessedBuffer()
+                self.playerNode.scheduleBuffer(silenceBuffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+                    guard let self = self, !self.isStopRequested else { return }
+                    
+                    Task {
+                        self.delegate?.ttsManager(self, didFinishUtterance: utterance)
+                        
+                        // Access the next utterance
+                        if let nextUtterance = self.preprocessedBuffers.first?.0 {
+                            self.delegate?.ttsManager(self, willSpeakUtterance: nextUtterance)
                         }
+                        
+                        // Start word-level tracking
+                        self.startWordTracking(for: utterance)
+                        
+                        self.playNextPreprocessedBuffer()
                     }
+                }
             } else {
                 // No silence buffer, proceed immediately
                 Task {
                     self.delegate?.ttsManager(self, didFinishUtterance: utterance)
-                    print("Finished playing '\(utterance.text)'")
-
+                    
                     // Access the next utterance
                     if let nextUtterance = self.preprocessedBuffers.first?.0 {
-                        print("Next utterance: '\(nextUtterance.text)'")
                         self.delegate?.ttsManager(self, willSpeakUtterance: nextUtterance)
-                        // You can perform additional actions with nextUtterance here
-                    } else {
-                        print("No more utterances in the queue.")
                     }
-
+                    
                     // Start word-level tracking
                     self.startWordTracking(for: utterance)
-
+                    
                     self.playNextPreprocessedBuffer()
                 }
             }
@@ -542,6 +507,45 @@ enum InputMode {
 
     func loadPDF(from url: URL) -> [String] {
         return pdfManager.loadPDF(from: url)
+    }
+
+    private func preprocessText(_ text: String) -> [String] {
+        // Initialize sentence tokenizer
+        let sentenceTokenizer = NLTokenizer(unit: .sentence)
+        sentenceTokenizer.string = text
+        
+        // Process text to handle line breaks and hyphenation
+        var processedText = text
+        
+        // Handle hyphenated words split across lines
+        processedText = processedText.replacingOccurrences(
+            of: "-\\s*\n\\s*",
+            with: "",
+            options: .regularExpression,
+            range: nil
+        )
+        
+        // Replace single line breaks within paragraphs with spaces
+        processedText = processedText.replacingOccurrences(
+            of: "(?<!\n)\n(?!\n)",
+            with: " ",
+            options: .regularExpression,
+            range: nil
+        )
+        
+        // Tokenize into sentences
+        var sentences: [String] = []
+        sentenceTokenizer.string = processedText
+        
+        sentenceTokenizer.enumerateTokens(in: processedText.startIndex..<processedText.endIndex) { range, _ in
+            let sentence = String(processedText[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !sentence.isEmpty {
+                sentences.append(sentence)
+            }
+            return true
+        }
+        
+        return sentences
     }
 }
 

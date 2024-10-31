@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import NaturalLanguage
 
 class TTSUtterance {
     let text: String
@@ -18,17 +19,32 @@ class TTSUtterance {
 
     init(_ text: String, pageNumber: Int? = nil) {
         self.text = text
-        // Use a regular expression to split text into words, including punctuation attached to words
-        let regexPattern = "[\\w'-]+|[.,!?;:]"
-        let regex = try? NSRegularExpression(pattern: regexPattern, options: [])
-        let matches = regex?.matches(in: text, options: [], range: NSRange(text.startIndex..., in: text)) ?? []
-
-        self.words = matches.compactMap {
-            if let range = Range($0.range, in: text) {
-                return String(text[range])
+        
+        // Detect if this is a title based on characteristics
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.isTitle = trimmedText
+            .split(separator: "\n")
+            .count == 1 && // Single line
+            !trimmedText.contains(".") && // No periods
+            trimmedText.count < 100 && // Reasonable title length
+            !trimmedText.hasSuffix("?") && // Not a question
+            !trimmedText.hasSuffix("!") // Not an exclamation
+        
+        // Initialize word tokenizer
+        let wordTokenizer = NLTokenizer(unit: .word)
+        wordTokenizer.string = text
+        
+        // Get word tokens with their ranges
+        var words: [String] = []
+        wordTokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, attributes in
+            let word = String(text[range])
+            if !word.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                words.append(word)
             }
-            return nil
+            return true
         }
+        
+        self.words = words
         self.pageNumber = pageNumber
     }
 
