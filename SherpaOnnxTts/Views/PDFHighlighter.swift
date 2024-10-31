@@ -75,23 +75,21 @@ struct PDFHighlighter {
 
                     // Create a PDFSelection for the found range
                     if let selection = currentPage.selection(for: originalRange) {
-                        let bounds = selection.bounds(for: currentPage)
-                        print("    📐 Bounds: \(bounds)")
-                        
-                        let annotation = RoundedHighlightAnnotation(
-                            bounds: bounds,
-                            forType: .highlight,
-                            withProperties: nil
+                        let lineAnnotations = createLineHighlights(
+                            selection: selection,
+                            currentPage: currentPage
                         )
-                        annotation.color = UIColor.yellow.withAlphaComponent(0.3)
-                        print("    🎨 Adding line highlight")
-                        currentPage.addAnnotation(annotation)
-                        PDFHighlighter.currentLineAnnotations.append(annotation)
+                        
+                        print("    🎨 Adding \(lineAnnotations.count) line highlights")
+                        for annotation in lineAnnotations {
+                            currentPage.addAnnotation(annotation)
+                            PDFHighlighter.currentLineAnnotations.append(annotation)
+                        }
                         didHighlightAny = true
                         
                         if !word.isEmpty {
                             print("    🔤 Processing word highlight for: \"\(word)\"")
-                            handleWordHighlighting(word: word, currentPage: currentPage, lineBounds: bounds)
+                            handleWordHighlighting(word: word, currentPage: currentPage, lineBounds: selection.bounds(for: currentPage))
                         }
                         
                         print("    ✋ Breaking search as match was found")
@@ -260,5 +258,30 @@ struct PDFHighlighter {
         
         print("    📍 Found \(possibleRanges.count) exact matches")
         return possibleRanges.first
+    }
+
+    private func createLineHighlights(
+        selection: PDFSelection,
+        currentPage: PDFPage
+    ) -> [PDFAnnotation] {
+        var annotations: [PDFAnnotation] = []
+        
+        // Get all line rects for this selection
+        let lineRects = selection.selectionsByLine()
+            .map { $0.bounds(for: currentPage) }
+            .filter { !$0.isEmpty }
+        
+        // Create an annotation for each line
+        for lineRect in lineRects {
+            let annotation = RoundedHighlightAnnotation(
+                bounds: lineRect,
+                forType: .highlight,
+                withProperties: nil
+            )
+            annotation.color = UIColor.yellow.withAlphaComponent(0.3)
+            annotations.append(annotation)
+        }
+        
+        return annotations
     }
 }
