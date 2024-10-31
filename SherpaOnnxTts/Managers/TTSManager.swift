@@ -8,8 +8,8 @@
 import AVFoundation
 import Combine
 import Foundation
-import PDFKit
 import NaturalLanguage
+import PDFKit
 
 enum InputMode {
     case text
@@ -84,34 +84,34 @@ enum InputMode {
         stopSpeaking()
         processingTask?.cancel()
         preprocessingTask?.cancel()
-        
+
         // Reset stop flag
         isStopRequested = false
-        
+
         // Preprocess text into sentences
         let sentences = preprocessText(text)
         guard !sentences.isEmpty else { return }
-        
+
         // Reset tracking variables
         spokenText = ""
         currentSentence = ""
         currentWord = ""
-        
+
         // Start preprocessing with text tracking
         preprocessingTask = Task { [weak self] in
             guard let self = self else { return }
-            
+
             for sentence in sentences {
                 guard !Task.isCancelled else { break }
-                
+
                 while !self.isStopRequested && self.preprocessedBuffers.count >= self.maxPreprocessedBuffers {
-                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    try? await Task.sleep(nanoseconds: 100000000)
                 }
-                
+
                 guard !Task.isCancelled && !self.isStopRequested else { break }
-                
+
                 let utterance = TTSUtterance(sentence, pageNumber: pageNumber)
-                
+
                 if let buffer = await self.generateAudioBuffer(for: utterance) {
                     Task {
                         self.preprocessedBuffers.append((utterance, buffer))
@@ -122,7 +122,7 @@ enum InputMode {
                 }
             }
         }
-        
+
         if let pageNumber = pageNumber {
             pdfManager.setCurrentPage(pageNumber)
         }
@@ -252,101 +252,32 @@ enum InputMode {
 
     private func scheduleBuffer(_ buffer: AVAudioPCMBuffer, for utterance: TTSUtterance) {
         playerNode.volume = volume
-        
+
         // Calculate utterance duration
         utterance.duration = Double(buffer.frameLength) / buffer.format.sampleRate
-        
+
         // Start word tracking before playing
         startWordTracking(for: utterance)
-        
-        // Create silence buffers with appropriate durations
-        let silenceBuffer: AVAudioPCMBuffer?
-        
-        // Check for different pause conditions
-        if utterance.isTitle {
-            // Longer pause after titles (0.8 seconds)
-            silenceBuffer = createSilenceBuffer(duration: 0.8)
-        } else if utterance.text.contains("\n\n") {
-            // Double line break pause (0.6 seconds)
-            silenceBuffer = createSilenceBuffer(duration: 0.6)
-        } else if utterance.text.trimmingCharacters(in: .whitespaces).hasSuffix(".") {
-            // Normal sentence pause (0.4 seconds)
-            silenceBuffer = createSilenceBuffer(duration: 0.4)
-        } else if utterance.text.trimmingCharacters(in: .whitespaces).hasSuffix("\n") {
-            // Single line break pause (0.3 seconds)
-            silenceBuffer = createSilenceBuffer(duration: 0.3)
-        } else {
-            // Short pause for other breaks (0.2 seconds)
-            silenceBuffer = createSilenceBuffer(duration: 0.2)
-        }
-        
+
         // Schedule the main buffer
         playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             guard let self = self else { return }
-            
-            // If we have a silence buffer, schedule it
-            if let silenceBuffer = silenceBuffer {
-                self.playerNode.scheduleBuffer(silenceBuffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
-                    guard let self = self, !self.isStopRequested else { return }
-                    
-                    Task {
-                        self.delegate?.ttsManager(self, didFinishUtterance: utterance)
-                        
-                        // Access the next utterance
-                        if let nextUtterance = self.preprocessedBuffers.first?.0 {
-                            self.delegate?.ttsManager(self, willSpeakUtterance: nextUtterance)
-                        }
-                        
-                        // Start word-level tracking
-                        self.startWordTracking(for: utterance)
-                        
-                        self.playNextPreprocessedBuffer()
-                    }
+
+            // No silence buffer, proceed immediately
+            Task {
+                self.delegate?.ttsManager(self, didFinishUtterance: utterance)
+
+                // Access the next utterance
+                if let nextUtterance = self.preprocessedBuffers.first?.0 {
+                    self.delegate?.ttsManager(self, willSpeakUtterance: nextUtterance)
                 }
-            } else {
-                // No silence buffer, proceed immediately
-                Task {
-                    self.delegate?.ttsManager(self, didFinishUtterance: utterance)
-                    
-                    // Access the next utterance
-                    if let nextUtterance = self.preprocessedBuffers.first?.0 {
-                        self.delegate?.ttsManager(self, willSpeakUtterance: nextUtterance)
-                    }
-                    
-                    // Start word-level tracking
-                    self.startWordTracking(for: utterance)
-                    
-                    self.playNextPreprocessedBuffer()
-                }
+
+                // Start word-level tracking
+                self.startWordTracking(for: utterance)
+
+                self.playNextPreprocessedBuffer()
             }
         }
-    }
-
-    private func createSilenceBuffer(duration: Double) -> AVAudioPCMBuffer? {
-        let format = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: 22050,
-            channels: audioEngine.outputNode.outputFormat(forBus: 0).channelCount,
-            interleaved: false
-        )!
-
-        let frameCount = UInt32(duration * format.sampleRate)
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
-            return nil
-        }
-
-        buffer.frameLength = frameCount
-
-        // Fill with silence (zeros)
-        if let channelData = buffer.floatChannelData {
-            for channel in 0 ..< Int(format.channelCount) {
-                for frame in 0 ..< Int(frameCount) {
-                    channelData[channel][frame] = 0.0
-                }
-            }
-        }
-
-        return buffer
     }
 
     func stopSpeaking() {
@@ -512,11 +443,10 @@ enum InputMode {
     private func preprocessText(_ text: String) -> [String] {
         // Initialize sentence tokenizer
         let sentenceTokenizer = NLTokenizer(unit: .sentence)
-        sentenceTokenizer.string = text
-        
+
         // Process text to handle line breaks and hyphenation
         var processedText = text
-        
+
         // Handle hyphenated words split across lines
         processedText = processedText.replacingOccurrences(
             of: "-\\s*\n\\s*",
@@ -524,27 +454,79 @@ enum InputMode {
             options: .regularExpression,
             range: nil
         )
-        
-        // Replace single line breaks within paragraphs with spaces
-        processedText = processedText.replacingOccurrences(
-            of: "(?<!\n)\n(?!\n)",
-            with: " ",
-            options: .regularExpression,
-            range: nil
-        )
-        
-        // Tokenize into sentences
+
+        // Split text into lines for title detection
+        let lines = processedText.components(separatedBy: "\n")
         var sentences: [String] = []
-        sentenceTokenizer.string = processedText
-        
-        sentenceTokenizer.enumerateTokens(in: processedText.startIndex..<processedText.endIndex) { range, _ in
-            let sentence = String(processedText[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+        var currentParagraph: [String] = []
+
+        for line in lines {
+            let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+            if trimmedLine.isEmpty { continue }
+
+            // Title detection heuristics
+            let isTitle = isTitleLine(trimmedLine)
+
+            if isTitle {
+                // If we have a pending paragraph, process it first
+                if !currentParagraph.isEmpty {
+                    let paragraphText = currentParagraph.joined(separator: " ")
+                    sentences.append(contentsOf: tokenizeSentences(paragraphText, sentenceTokenizer))
+                    currentParagraph.removeAll()
+                }
+                // Add the title as a separate sentence
+                sentences.append(trimmedLine)
+            } else {
+                currentParagraph.append(trimmedLine)
+            }
+        }
+
+        // Process any remaining paragraph text
+        if !currentParagraph.isEmpty {
+            let paragraphText = currentParagraph.joined(separator: " ")
+            sentences.append(contentsOf: tokenizeSentences(paragraphText, sentenceTokenizer))
+        }
+
+        return sentences.filter { !$0.isEmpty }
+    }
+
+    private func isTitleLine(_ line: String) -> Bool {
+        let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+        if trimmedLine.isEmpty { return false }
+
+        // Check for common title indicators
+        let startsWithKeyword = trimmedLine.lowercased().hasPrefix("book") ||
+            trimmedLine.lowercased().hasPrefix("chapter")
+
+        // Check if all significant words are capitalized
+        let words = trimmedLine.split(separator: " ")
+        let isTitleCase = words.count <= 7 && words.allSatisfy { word in
+            guard let first = word.first else { return false }
+            // Ignore small words like "a", "the", "in", etc.
+            let smallWords = ["a", "an", "the", "in", "on", "at", "to", "for", "of", "and"]
+            return first.isUppercase || smallWords.contains(word.lowercased())
+        }
+
+        // Check for sentence-ending punctuation
+        let hasEndPunctuation = trimmedLine.hasSuffix(".") ||
+            trimmedLine.hasSuffix("?") ||
+            trimmedLine.hasSuffix("!")
+
+        return (startsWithKeyword || isTitleCase) && !hasEndPunctuation
+    }
+
+    private func tokenizeSentences(_ text: String, _ tokenizer: NLTokenizer) -> [String] {
+        var sentences: [String] = []
+        tokenizer.string = text
+
+        tokenizer.enumerateTokens(in: text.startIndex ..< text.endIndex) { range, _ in
+            let sentence = String(text[range]).trimmingCharacters(in: .whitespacesAndNewlines)
             if !sentence.isEmpty {
                 sentences.append(sentence)
             }
             return true
         }
-        
+
         return sentences
     }
 }
