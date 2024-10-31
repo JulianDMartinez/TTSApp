@@ -43,85 +43,70 @@ struct PDFHighlighter {
         clearHighlights()
         var didHighlightAny = false
         
+        // Extract and normalize the page text
+        guard let pageContent = currentPage.string else {
+            print("❌ Unable to extract page content")
+            return false
+        }
+        let normalizedPageContent = normalizeText(pageContent)
+        print("📝 Normalized page content: \"\(normalizedPageContent)\"")
+        
         for lineText in lineTexts {
             print("\n📋 Processing line: \"\(lineText)\"")
-            var searchVariations = [lineText]
             
-            // Handle line breaks and hyphens
-            let noLineBreaks = lineText.replacingOccurrences(
-                of: "-\\s*\n\\s*",
-                with: "",
-                options: .regularExpression
-            )
-            if noLineBreaks != lineText {
-                print("  ↩️ Removed line breaks: \"\(noLineBreaks)\"")
-                searchVariations.append(noLineBreaks)
-            }
+            // Normalize the search text
+            let normalizedSearchText = normalizeText(lineText)
+            print("  🔄 Normalized search text: \"\(normalizedSearchText)\"")
             
-            // Handle smart quotes
-            let normalizedQuotes = lineText
-                .replacingOccurrences(of: #"""#, with: "\"")
-                .replacingOccurrences(of: #"""#, with: "\"")
-            if normalizedQuotes != lineText {
-                print("  \" Normalized quotes: \"\(normalizedQuotes)\"")
-                searchVariations.append(normalizedQuotes)
-            }
-            
-            // Handle em dashes
-            let normalizedDashes = lineText
-                .replacingOccurrences(of: "—", with: "-")
-                .replacingOccurrences(of: "–", with: "-")
-            if normalizedDashes != lineText {
-                print("  — Normalized dashes: \"\(normalizedDashes)\"")
-                searchVariations.append(normalizedDashes)
-            }
-            
-            // Try each variation
-            print("🔍 Will try variations:")
-            searchVariations.enumerated().forEach { index, variation in
-                print("  \(index + 1). \"\(variation)\"")
-            }
-            
-            for (index, searchText) in searchVariations.enumerated() {
-                let normalizedText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-                print("\n  🔎 Trying variation #\(index + 1): \"\(normalizedText)\"")
-                
-                // Try with and without regex
-                let selections = document.findString(
-                    normalizedText,
-                    withOptions: [.caseInsensitive]
-                )
-                print("    Found \(selections.count) potential matches")
-                
-                if let selection = selections.first(where: { $0.pages.contains(currentPage) }) {
-                    let bounds = selection.bounds(for: currentPage)
-                    print("    ✅ Match found on current page")
-                    print("    📐 Bounds: \(bounds)")
-                    
-                    let annotation = RoundedHighlightAnnotation(
-                        bounds: bounds,
-                        forType: .highlight,
-                        withProperties: nil
-                    )
-                    annotation.color = UIColor.yellow.withAlphaComponent(0.3)
-                    print("    🎨 Adding line highlight")
-                    currentPage.addAnnotation(annotation)
-                    PDFHighlighter.currentLineAnnotations.append(annotation)
-                    didHighlightAny = true
-                    
-                    if !word.isEmpty {
-                        print("    🔤 Processing word highlight for: \"\(word)\"")
-                        handleWordHighlighting(word: word, currentPage: currentPage, lineBounds: bounds)
+            // Use regular expressions to search within normalized page content
+            if let range = normalizedPageContent.range(
+                of: NSRegularExpression.escapedPattern(for: normalizedSearchText),
+                options: [.regularExpression, .caseInsensitive]
+            ) {
+                print("  ✅ Match found in normalized page content")
+
+                // Map the range back to the original text
+                if let originalRange = mapRange(
+                    from: normalizedPageContent,
+                    to: pageContent,
+                    normalizedRange: range
+                ) {
+                    print("  🔄 Mapped range in original text: \(originalRange)")
+
+                    // Create a PDFSelection for the found range
+                    if let selection = currentPage.selection(for: originalRange) {
+                        let bounds = selection.bounds(for: currentPage)
+                        print("    📐 Bounds: \(bounds)")
+                        
+                        let annotation = RoundedHighlightAnnotation(
+                            bounds: bounds,
+                            forType: .highlight,
+                            withProperties: nil
+                        )
+                        annotation.color = UIColor.yellow.withAlphaComponent(0.3)
+                        print("    🎨 Adding line highlight")
+                        currentPage.addAnnotation(annotation)
+                        PDFHighlighter.currentLineAnnotations.append(annotation)
+                        didHighlightAny = true
+                        
+                        if !word.isEmpty {
+                            print("    🔤 Processing word highlight for: \"\(word)\"")
+                            handleWordHighlighting(word: word, currentPage: currentPage, lineBounds: bounds)
+                        }
+                        
+                        print("    ✋ Breaking search as match was found")
+                        continue
+                    } else {
+                        print("    ❌ Could not create selection for found range")
                     }
-                    
-                    print("    ✋ Breaking search as match was found")
-                    break
                 } else {
-                    print("    ❌ No matches found with these options")
+                    print("    ❌ Could not map normalized range to original content")
                 }
+            } else {
+                print("  ❌ No matches found in normalized page content")
             }
         }
-        
+
         print("\n📊 Final result: \(didHighlightAny ? "✅ Successfully added highlights" : "❌ No highlights added")")
         return didHighlightAny
     }
@@ -167,5 +152,113 @@ struct PDFHighlighter {
                 print("         Within line?: \(lineBounds.contains(bounds))")
             }
         }
+    }
+
+    private func normalizeText(_ text: String) -> String {
+        let normalizedText = text
+            // Replace ligatures
+            .replacingOccurrences(of: "\u{FB00}", with: "ff") // ﬀ
+            .replacingOccurrences(of: "\u{FB01}", with: "fi") // ﬁ
+            .replacingOccurrences(of: "\u{FB02}", with: "fl") // ﬂ
+            .replacingOccurrences(of: "\u{FB03}", with: "ffi") // ﬃ
+            .replacingOccurrences(of: "\u{FB04}", with: "ffl") // ﬄ
+            .replacingOccurrences(of: "\u{FB05}", with: "ft") // ﬅ
+            .replacingOccurrences(of: "\u{FB06}", with: "st") // ﬆ
+            // Handle smart quotes and apostrophes
+            .replacingOccurrences(of: "\u{201C}", with: "\"") // Left double quotation mark
+            .replacingOccurrences(of: "\u{201D}", with: "\"") // Right double quotation mark
+            .replacingOccurrences(of: "\u{2018}", with: "'")  // Left single quotation mark
+            .replacingOccurrences(of: "\u{2019}", with: "'")  // Right single quotation mark
+            // Replace dashes
+            .replacingOccurrences(of: "\u{2014}", with: "--") // Em dash
+            .replacingOccurrences(of: "\u{2013}", with: "-")  // En dash
+            // Remove hyphenation at line breaks
+            .replacingOccurrences(of: "-\n", with: "")        // Remove hyphen and line break
+            // Replace line breaks with spaces
+            .replacingOccurrences(of: "\n", with: " ")
+            // Normalize unicode
+            .applyingTransform(.init("NFKD; [:Nonspacing Mark:] Remove;"), reverse: false) ?? text
+            // Replace multiple spaces with a single space
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() // Make text case-insensitive
+        
+        return normalizedText
+    }
+
+    private func mapRange(
+        from normalizedText: String,
+        to originalText: String,
+        normalizedRange: Range<String.Index>
+    ) -> NSRange? {
+        // Extract the substring we're looking for from the normalized text
+        let targetSubstring = String(normalizedText[normalizedRange])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        print("    🔍 Looking for: \"\(targetSubstring)\"")
+        
+        // Split the substring into words for start/end matching
+        let words = targetSubstring.components(separatedBy: .whitespaces)
+        guard let firstWord = words.first, let lastWord = words.last else {
+            print("    ❌ No words found in substring")
+            return nil
+        }
+        
+        // Find all possible ranges of the first word
+        var currentSearchStart = originalText.startIndex
+        var possibleRanges: [NSRange] = []
+        
+        while let firstRange = originalText[currentSearchStart...].range(
+            of: firstWord,
+            options: [.caseInsensitive, .diacriticInsensitive]
+        ) {
+            // For each occurrence of the first word, look for the last word in the remaining text
+            let remainingText = originalText[firstRange.upperBound...]
+            if let lastRange = remainingText.range(
+                of: lastWord,
+                options: [.caseInsensitive, .diacriticInsensitive]
+            ) {
+                // Get the full text range from start of first word to end of last word
+                let fullRange = firstRange.lowerBound...originalText.index(firstRange.upperBound, offsetBy: remainingText.distance(
+                    from: remainingText.startIndex,
+                    to: lastRange.upperBound
+                ))
+                
+                // Extract and normalize the text in this range
+                let extractedText = String(originalText[fullRange])
+                let normalizedExtracted = normalizeText(extractedText)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                print("    📝 Checking range: \"\(extractedText)\"")
+                print("    🔄 Normalized: \"\(normalizedExtracted)\"")
+                
+                // Compare normalized versions, ignoring extra whitespace
+                if normalizedExtracted.components(separatedBy: .whitespacesAndNewlines)
+                    .joined(separator: " ")
+                    .lowercased() == targetSubstring.components(separatedBy: .whitespacesAndNewlines)
+                    .joined(separator: " ")
+                    .lowercased() {
+                    // Convert to NSRange
+                    let utf16View = originalText.utf16
+                    let startOffset = utf16View.distance(from: utf16View.startIndex, to: fullRange.lowerBound)
+                    let endOffset = utf16View.distance(from: utf16View.startIndex, to: fullRange.upperBound)
+                    let possibleRange = NSRange(location: startOffset, length: endOffset - startOffset)
+                    possibleRanges.append(possibleRange)
+                    print("    ✅ Found exact match")
+                } else {
+                    print("    ❌ Normalized text doesn't match exactly")
+                }
+            }
+            
+            // Move search start to just after this occurrence of first word
+            currentSearchStart = firstRange.upperBound
+            
+            // Safety check to prevent infinite loop
+            if currentSearchStart >= originalText.endIndex {
+                break
+            }
+        }
+        
+        print("    📍 Found \(possibleRanges.count) exact matches")
+        return possibleRanges.first
     }
 }
