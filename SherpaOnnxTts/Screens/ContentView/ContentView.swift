@@ -40,7 +40,7 @@ struct ContentView: View {
                 PDFViewer(
                     document: document,
                     currentPage: viewModel.currentPage,
-                    currentLinesOriginal: [viewModel.currentSentenceOriginal],
+                    currentLinesOriginal: viewModel.currentSentenceOriginals,
                     currentWord: viewModel.currentWord
                 )
                 .edgesIgnoringSafeArea(.all)

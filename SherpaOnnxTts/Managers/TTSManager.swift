@@ -72,6 +72,9 @@ enum InputMode {
 
     private let wordHighlightLeadTime: Double = 0.05 // Adjust the lead time as needed
 
+    // Add property to store original text
+    private var originalText: String = ""
+
     // MARK: - Initialization
     init() {
         converterNode = AVAudioMixerNode()
@@ -80,58 +83,12 @@ enum InputMode {
 
     // MARK: - Public Methods
     func speak(_ text: String, pageNumber: Int? = nil) {
-        // Stop any existing speech and processing
-        stopSpeaking()
-        processingTask?.cancel()
-        preprocessingTask?.cancel()
-
-        // Reset stop flag
-        isStopRequested = false
-
-        // Store original text and get processed sentences
-        let originalText = text
-        let sentences = preprocessText(text)
-        guard !sentences.isEmpty else { return }
-
-        // Reset tracking variables
-        spokenText = ""
-        currentSentence = ""
-        currentWord = ""
-
-        // Start preprocessing with text tracking
-        preprocessingTask = Task { [weak self] in
-            guard let self = self else { return }
-
-            for sentence in sentences {
-                guard !Task.isCancelled else { break }
-
-                while !self.isStopRequested && self.preprocessedBuffers.count >= self.maxPreprocessedBuffers {
-                    try? await Task.sleep(nanoseconds: 100000000)
-                }
-
-                guard !Task.isCancelled && !self.isStopRequested else { break }
-
-                // Find the original text segment that corresponds to this processed sentence
-                let originalSentences = findOriginalSentences(processed: sentence, in: originalText)
-                let utterance = TTSUtterance(
-                    originalTexts: originalSentences,
-                    processedText: sentence,
-                    pageNumber: pageNumber
-                )
-
-                if let buffer = await self.generateAudioBuffer(for: utterance) {
-                    Task {
-                        self.preprocessedBuffers.append((utterance, buffer))
-                        if !self.isSpeaking {
-                            self.playNextPreprocessedBuffer()
-                        }
-                    }
-                }
-            }
-        }
-
-        if let pageNumber = pageNumber {
-            pdfManager.setCurrentPage(pageNumber)
+        // Store the original text when speaking
+        originalText = text
+        
+        print("originalText: \(originalText)")
+        Task {
+            await processText(text, pageNumber: pageNumber)
         }
     }
 
@@ -259,31 +216,27 @@ enum InputMode {
 
     private func scheduleBuffer(_ buffer: AVAudioPCMBuffer, for utterance: TTSUtterance) {
         playerNode.volume = volume
-
-        // Calculate utterance duration
-        utterance.duration = Double(buffer.frameLength) / buffer.format.sampleRate
-
-        // Start word tracking before playing
-        startWordTracking(for: utterance)
-
-        // Schedule the main buffer
         playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             guard let self = self else { return }
-
-            // No silence buffer, proceed immediately
-            Task {
+            Task { @MainActor in
+                self.wordTrackingDisplayLink?.invalidate()
                 self.delegate?.ttsManager(self, didFinishUtterance: utterance)
 
-                // Access the next utterance
-                if let nextUtterance = self.preprocessedBuffers.first?.0 {
-                    self.delegate?.ttsManager(self, willSpeakUtterance: nextUtterance)
+                // Remove the played buffer
+                if !self.preprocessedBuffers.isEmpty {
+                    self.preprocessedBuffers.removeFirst()
                 }
 
-                // Start word-level tracking
-                self.startWordTracking(for: utterance)
-
-                self.playNextPreprocessedBuffer()
+                // Schedule next buffer if available
+                if let nextBuffer = self.preprocessedBuffers.first {
+                    self.delegate?.ttsManager(self, willSpeakUtterance: nextBuffer.0)
+                    self.scheduleBuffer(nextBuffer.1, for: nextBuffer.0)
+                }
             }
+        }
+
+        if !playerNode.isPlaying {
+            playerNode.play()
         }
     }
 
@@ -539,51 +492,177 @@ enum InputMode {
 
     private func findOriginalSentences(processed: String, in originalText: String) -> [String] {
         print("\n🔄 Finding original sentences")
-        print("Processed: \"\(processed)\"")
-        print("Original text length: \(originalText.count) characters")
-
-        // Remove extra whitespace and normalize for comparison
+        print("Processed text: \"\(processed)\"")
+        
+        // Normalize the processed text
         let normalizedProcessed = processed.trimmingCharacters(in: .whitespacesAndNewlines)
             .components(separatedBy: .whitespacesAndNewlines)
             .joined(separator: " ")
-
-        // Split original text into potential sentences
+            .lowercased()
+        
+        // Split original text into sentences
         let sentenceTokenizer = NLTokenizer(unit: .sentence)
         sentenceTokenizer.string = originalText
-
-        var matchingSentences: [(sentence: String, score: Int)] = []
-
-        sentenceTokenizer.enumerateTokens(in: originalText.startIndex ..< originalText.endIndex) { range, _ in
-            let originalSentence = String(originalText[range])
-            print("📝 Checking original sentence: \"\(originalSentence)\"")
-
-            let normalizedOriginal = originalSentence.trimmingCharacters(in: .whitespacesAndNewlines)
-                .components(separatedBy: .whitespacesAndNewlines)
-                .joined(separator: " ")
-            print("Normalized: \"\(normalizedOriginal)\"")
-
-            let score = calculateSimilarityScore(between: normalizedProcessed, and: normalizedOriginal)
-            print("Similarity score: \(score)")
-
-            if score > 0 {
-                matchingSentences.append((originalSentence, score))
-                print("✅ Match found with score: \(score)")
+        
+        var bestMatch: (sentences: [String], score: Double) = ([], 0.0)
+        var currentSequence: [String] = []
+        
+        // Lower threshold for better matching
+        let threshold = max(0.6, Double(normalizedProcessed.count) / 100.0)
+        
+        // Handle hyphenated words
+        let processedWords = normalizedProcessed.components(separatedBy: .whitespacesAndNewlines)
+        var isHyphenated = false
+        
+        sentenceTokenizer.enumerateTokens(in: originalText.startIndex..<originalText.endIndex) { range, _ in
+            let sentence = String(originalText[range])
+            let normalizedSentence = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            if normalizedSentence.hasSuffix("-") {
+                isHyphenated = true
+                currentSequence.append(normalizedSentence)
+                return true
             }
+            
+            let finalSentence = isHyphenated ? 
+                currentSequence.joined() + normalizedSentence : 
+                normalizedSentence
+            
+            currentSequence.append(finalSentence)
+            isHyphenated = false
+            
+            // Calculate similarity score
+            let score = calculateSimilarityScore(between: normalizedProcessed, and: finalSentence.lowercased())
+            
+            if score > threshold {
+                bestMatch = ([finalSentence], score)
+                return false
+            }
+            
             return true
         }
-
-        // Sort by score and convert to array of sentences
-        let sortedSentences = matchingSentences.sorted { $0.score > $1.score }
-        let result = sortedSentences.map { $0.sentence }
-
-        print("🎯 Found \(result.count) matching sentences")
-        return result
+        
+        return bestMatch.score > 0.0 ? bestMatch.sentences : [processed]
     }
 
-    private func calculateSimilarityScore(between str1: String, and str2: String) -> Int {
-        let words1 = Set(str1.lowercased().split(separator: " "))
-        let words2 = Set(str2.lowercased().split(separator: " "))
-        return words1.intersection(words2).count
+    private func calculateSimilarityScore(between str1: String, and str2: String) -> Double {
+        let normalized1 = str1.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized2 = str2.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Use Levenshtein distance for better accuracy
+        let distance = levenshteinDistance(between: normalized1, and: normalized2)
+        let maxLength = Double(max(normalized1.count, normalized2.count))
+
+        // Calculate similarity score (1.0 means perfect match, 0.0 means completely different)
+        return 1.0 - (Double(distance) / maxLength)
+    }
+
+    private func levenshteinDistance(between str1: String, and str2: String) -> Int {
+        let str1Array = Array(str1)
+        let str2Array = Array(str2)
+        let m = str1Array.count
+        let n = str2Array.count
+
+        var matrix = Array(repeating: Array(repeating: 0, count: n + 1), count: m + 1)
+
+        for i in 0 ... m {
+            matrix[i][0] = i
+        }
+
+        for j in 0 ... n {
+            matrix[0][j] = j
+        }
+
+        for i in 1 ... m {
+            for j in 1 ... n {
+                if str1Array[i - 1] == str2Array[j - 1] {
+                    matrix[i][j] = matrix[i - 1][j - 1]
+                } else {
+                    matrix[i][j] = min(
+                        matrix[i - 1][j] + 1, // deletion
+                        matrix[i][j - 1] + 1, // insertion
+                        matrix[i - 1][j - 1] + 1 // substitution
+                    )
+                }
+            }
+        }
+
+        return matrix[m][n]
+    }
+
+    private func preprocessUtterance(_ sentence: String, pageNumber: Int?) async -> TTSUtterance? {
+        guard !isStopRequested else { return nil }
+
+        // Find original sentences in PDF text
+        let originalSentences = findOriginalSentences(
+            processed: sentence,
+            in: originalText
+        )
+
+        print("Found original sentences: \(originalSentences)")
+
+        // Create utterance with original and processed text
+        let utterance = TTSUtterance(
+            originalTexts: originalSentences.isEmpty ? [sentence] : originalSentences,
+            processedText: sentence,
+            pageNumber: pageNumber
+        )
+
+        return utterance
+    }
+
+    private func processText(_ text: String, pageNumber: Int?) async {
+        // Reset stop flag and clear any existing buffers
+        isStopRequested = false
+        preprocessedBuffers.removeAll()
+
+        // Store original text for sentence matching
+        originalText = text
+
+        // Preprocess text into sentences
+        let sentences = preprocessText(text)
+
+        for sentence in sentences {
+            guard !isStopRequested else { break }
+
+            if let utterance = await preprocessUtterance(sentence, pageNumber: pageNumber) {
+                let audio = tts.generate(text: utterance.text, sid: speakerId, speed: rate)
+
+                let mainMixerFormat = audioEngine.mainMixerNode.outputFormat(forBus: 0)
+                let format = AVAudioFormat(
+                    commonFormat: .pcmFormatFloat32,
+                    sampleRate: mainMixerFormat.sampleRate,
+                    channels: mainMixerFormat.channelCount,
+                    interleaved: false
+                )!
+
+                let frameCount = UInt32(audio.samples.count)
+                guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+                    continue
+                }
+
+                buffer.frameLength = frameCount
+
+                if let channelData = buffer.floatChannelData {
+                    audio.samples.withUnsafeBufferPointer { samples in
+                        for channel in 0 ..< Int(format.channelCount) {
+                            for i in 0 ..< Int(frameCount) {
+                                channelData[channel][i] = samples[i]
+                            }
+                        }
+                    }
+                }
+
+                // Add to preprocessed buffers
+                preprocessedBuffers.append((utterance, buffer))
+
+                // If this is the first buffer, start playing
+                if preprocessedBuffers.count == 1 {
+                    delegate?.ttsManager(self, willSpeakUtterance: utterance)
+                    scheduleBuffer(buffer, for: utterance)
+                }
+            }
+        }
     }
 }
 

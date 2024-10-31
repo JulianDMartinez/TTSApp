@@ -21,7 +21,7 @@ class ContentViewModel {
     var inputMode: InputMode = .text
     var isSpeaking: Bool = false
     var isPaused: Bool = false
-    var currentSentenceOriginal: String = ""
+    var currentSentenceOriginals: [String] = []
 
     // MARK: - TTS Manager
     var ttsManager: TTSManager
@@ -88,7 +88,7 @@ extension ContentViewModel: TTSManagerDelegate {
         print("Processed text: \"\(utterance.text)\"")
         
         DispatchQueue.main.async {
-            self.currentSentenceOriginal = utterance.originalTexts.first ?? ""
+            self.currentSentenceOriginals = utterance.originalTexts.isEmpty ? [utterance.text] : utterance.originalTexts
             self.currentSentence = utterance.text
             self.currentWord = ""
             self.spokenText += utterance.text + " "
