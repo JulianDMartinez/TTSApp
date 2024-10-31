@@ -84,34 +84,37 @@ enum InputMode {
         stopSpeaking()
         processingTask?.cancel()
         preprocessingTask?.cancel()
-
+        
         // Reset stop flag
         isStopRequested = false
-
-        // Preprocess text into sentences
+        
+        // Store original text and get processed sentences
+        let originalText = text
         let sentences = preprocessText(text)
         guard !sentences.isEmpty else { return }
-
+        
         // Reset tracking variables
         spokenText = ""
         currentSentence = ""
         currentWord = ""
-
+        
         // Start preprocessing with text tracking
         preprocessingTask = Task { [weak self] in
             guard let self = self else { return }
-
+            
             for sentence in sentences {
                 guard !Task.isCancelled else { break }
-
+                
                 while !self.isStopRequested && self.preprocessedBuffers.count >= self.maxPreprocessedBuffers {
                     try? await Task.sleep(nanoseconds: 100000000)
                 }
-
+                
                 guard !Task.isCancelled && !self.isStopRequested else { break }
-
-                let utterance = TTSUtterance(sentence, pageNumber: pageNumber)
-
+                
+                // Find the original text segment that corresponds to this processed sentence
+                let originalSentence = findOriginalSentence(processed: sentence, in: originalText)
+                let utterance = TTSUtterance(originalText: originalSentence, processedText: sentence, pageNumber: pageNumber)
+                
                 if let buffer = await self.generateAudioBuffer(for: utterance) {
                     Task {
                         self.preprocessedBuffers.append((utterance, buffer))
@@ -122,7 +125,7 @@ enum InputMode {
                 }
             }
         }
-
+        
         if let pageNumber = pageNumber {
             pdfManager.setCurrentPage(pageNumber)
         }
@@ -528,6 +531,43 @@ enum InputMode {
         }
 
         return sentences
+    }
+
+    private func findOriginalSentence(processed: String, in originalText: String) -> String {
+        // Remove extra whitespace and normalize for comparison
+        let normalizedProcessed = processed.trimmingCharacters(in: .whitespacesAndNewlines)
+                                         .components(separatedBy: .whitespacesAndNewlines)
+                                         .joined(separator: " ")
+        
+        // Split original text into potential sentences
+        let sentenceTokenizer = NLTokenizer(unit: .sentence)
+        sentenceTokenizer.string = originalText
+        
+        var bestMatch = processed
+        var bestMatchScore = 0
+        
+        sentenceTokenizer.enumerateTokens(in: originalText.startIndex..<originalText.endIndex) { range, _ in
+            let originalSentence = String(originalText[range])
+            let normalizedOriginal = originalSentence.trimmingCharacters(in: .whitespacesAndNewlines)
+                                                   .components(separatedBy: .whitespacesAndNewlines)
+                                                   .joined(separator: " ")
+            
+            // Calculate similarity score
+            let score = calculateSimilarityScore(between: normalizedProcessed, and: normalizedOriginal)
+            if score > bestMatchScore {
+                bestMatchScore = score
+                bestMatch = originalSentence
+            }
+            return true
+        }
+        
+        return bestMatch
+    }
+
+    private func calculateSimilarityScore(between str1: String, and str2: String) -> Int {
+        let words1 = Set(str1.lowercased().split(separator: " "))
+        let words2 = Set(str2.lowercased().split(separator: " "))
+        return words1.intersection(words2).count
     }
 }
 

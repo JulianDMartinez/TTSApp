@@ -7,6 +7,7 @@ struct PDFViewer: UIViewRepresentable {
     let currentPage: Int
     let spokenText: String
     let currentSentence: String
+    let currentSentenceOriginal: String
     let currentWord: String
     let isTracking: Bool
 
@@ -33,7 +34,7 @@ struct PDFViewer: UIViewRepresentable {
         )
         
         let didHighlight = highlighter.highlightTextInDocument(
-            sentence: currentSentence,
+            sentence: currentSentenceOriginal,
             word: currentWord
         )
         

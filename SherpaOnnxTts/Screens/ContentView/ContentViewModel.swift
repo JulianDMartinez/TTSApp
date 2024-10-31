@@ -21,6 +21,7 @@ class ContentViewModel {
     var inputMode: InputMode = .text
     var isSpeaking: Bool = false
     var isPaused: Bool = false
+    var currentSentenceOriginal: String = ""
 
     // MARK: - TTS Manager
     var ttsManager: TTSManager
@@ -83,6 +84,7 @@ extension ContentViewModel: TTSManagerDelegate {
 
     func ttsManager(_ manager: TTSManager, willSpeakUtterance utterance: TTSUtterance) {
         DispatchQueue.main.async {
+            self.currentSentenceOriginal = utterance.originalText
             self.currentSentence = utterance.text
             self.currentWord = ""
             self.spokenText += utterance.text + " "

@@ -42,6 +42,7 @@ struct ContentView: View {
                     currentPage: viewModel.currentPage,
                     spokenText: viewModel.spokenText,
                     currentSentence: viewModel.currentSentence,
+                    currentSentenceOriginal: viewModel.currentSentenceOriginal,
                     currentWord: viewModel.currentWord,
                     isTracking: viewModel.isTracking
                 )
