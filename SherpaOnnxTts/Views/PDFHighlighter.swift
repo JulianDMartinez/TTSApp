@@ -49,12 +49,12 @@ struct PDFHighlighter {
             if let lineSelection = lineSelections.first(where: { $0.pages.contains(currentPage) }) {
                 let lineBounds = lineSelection.bounds(for: currentPage)
                 
-                let lineAnnotation = PDFAnnotation(
+                let lineAnnotation = RoundedHighlightAnnotation(
                     bounds: lineBounds,
                     forType: .highlight,
                     withProperties: nil
                 )
-                lineAnnotation.color = UIColor.yellow.withAlphaComponent(0.5)
+                lineAnnotation.color = UIColor.yellow.withAlphaComponent(0.3)
                 currentPage.addAnnotation(lineAnnotation)
                 PDFHighlighter.currentLineAnnotations.append(lineAnnotation)
                 didHighlightAny = true
@@ -81,12 +81,12 @@ struct PDFHighlighter {
             lineBounds.contains($0.bounds(for: currentPage))
         }) {
             let wordBounds = wordSelection.bounds(for: currentPage)
-            let wordAnnotation = PDFAnnotation(
+            let wordAnnotation = RoundedHighlightAnnotation(
                 bounds: wordBounds,
                 forType: .highlight,
                 withProperties: nil
             )
-            wordAnnotation.color = UIColor.orange.withAlphaComponent(0.5)
+            wordAnnotation.color = UIColor.orange.withAlphaComponent(0.3)
             currentPage.addAnnotation(wordAnnotation)
             PDFHighlighter.currentWordAnnotation = wordAnnotation
         }

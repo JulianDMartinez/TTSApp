@@ -84,37 +84,41 @@ enum InputMode {
         stopSpeaking()
         processingTask?.cancel()
         preprocessingTask?.cancel()
-        
+
         // Reset stop flag
         isStopRequested = false
-        
+
         // Store original text and get processed sentences
         let originalText = text
         let sentences = preprocessText(text)
         guard !sentences.isEmpty else { return }
-        
+
         // Reset tracking variables
         spokenText = ""
         currentSentence = ""
         currentWord = ""
-        
+
         // Start preprocessing with text tracking
         preprocessingTask = Task { [weak self] in
             guard let self = self else { return }
-            
+
             for sentence in sentences {
                 guard !Task.isCancelled else { break }
-                
+
                 while !self.isStopRequested && self.preprocessedBuffers.count >= self.maxPreprocessedBuffers {
                     try? await Task.sleep(nanoseconds: 100000000)
                 }
-                
+
                 guard !Task.isCancelled && !self.isStopRequested else { break }
-                
+
                 // Find the original text segment that corresponds to this processed sentence
                 let originalSentences = findOriginalSentences(processed: sentence, in: originalText)
-                let utterance = TTSUtterance(originalTexts: originalSentences, processedText: sentence, pageNumber: pageNumber)
-                
+                let utterance = TTSUtterance(
+                    originalTexts: originalSentences,
+                    processedText: sentence,
+                    pageNumber: pageNumber
+                )
+
                 if let buffer = await self.generateAudioBuffer(for: utterance) {
                     Task {
                         self.preprocessedBuffers.append((utterance, buffer))
@@ -125,7 +129,7 @@ enum InputMode {
                 }
             }
         }
-        
+
         if let pageNumber = pageNumber {
             pdfManager.setCurrentPage(pageNumber)
         }
@@ -537,41 +541,41 @@ enum InputMode {
         print("\n🔄 Finding original sentences")
         print("Processed: \"\(processed)\"")
         print("Original text length: \(originalText.count) characters")
-        
+
         // Remove extra whitespace and normalize for comparison
         let normalizedProcessed = processed.trimmingCharacters(in: .whitespacesAndNewlines)
-                                         .components(separatedBy: .whitespacesAndNewlines)
-                                         .joined(separator: " ")
-        
+            .components(separatedBy: .whitespacesAndNewlines)
+            .joined(separator: " ")
+
         // Split original text into potential sentences
         let sentenceTokenizer = NLTokenizer(unit: .sentence)
         sentenceTokenizer.string = originalText
-        
+
         var matchingSentences: [(sentence: String, score: Int)] = []
-        
-        sentenceTokenizer.enumerateTokens(in: originalText.startIndex..<originalText.endIndex) { range, _ in
+
+        sentenceTokenizer.enumerateTokens(in: originalText.startIndex ..< originalText.endIndex) { range, _ in
             let originalSentence = String(originalText[range])
             print("📝 Checking original sentence: \"\(originalSentence)\"")
-            
+
             let normalizedOriginal = originalSentence.trimmingCharacters(in: .whitespacesAndNewlines)
-                                                   .components(separatedBy: .whitespacesAndNewlines)
-                                                   .joined(separator: " ")
+                .components(separatedBy: .whitespacesAndNewlines)
+                .joined(separator: " ")
             print("Normalized: \"\(normalizedOriginal)\"")
-            
+
             let score = calculateSimilarityScore(between: normalizedProcessed, and: normalizedOriginal)
             print("Similarity score: \(score)")
-            
+
             if score > 0 {
                 matchingSentences.append((originalSentence, score))
                 print("✅ Match found with score: \(score)")
             }
             return true
         }
-        
+
         // Sort by score and convert to array of sentences
         let sortedSentences = matchingSentences.sorted { $0.score > $1.score }
         let result = sortedSentences.map { $0.sentence }
-        
+
         print("🎯 Found \(result.count) matching sentences")
         return result
     }
