@@ -54,15 +54,19 @@ struct PDFHighlighter {
         for lineText in lineTexts {
             print("\n📋 Processing line: \"\(lineText)\"")
             
-            // Normalize the search text
             let normalizedSearchText = normalizeText(lineText)
-            print("  🔄 Normalized search text: \"\(normalizedSearchText)\"")
             
-            // Use regular expressions to search within normalized page content
             if let range = normalizedPageContent.range(
-                of: NSRegularExpression.escapedPattern(for: normalizedSearchText),
-                options: [.regularExpression, .caseInsensitive]
+                of: normalizedSearchText,
+                options: [.caseInsensitive, .diacriticInsensitive]
             ) {
+                let nsRange = NSRange(range, in: normalizedPageContent)
+                
+                guard let extractedText = extractText(from: pageContent, range: nsRange) else {
+                    print("❌ Failed to extract text safely")
+                    continue
+                }
+                
                 print("  ✅ Match found in normalized page content")
 
                 // Map the range back to the original text
@@ -155,31 +159,26 @@ struct PDFHighlighter {
     private func normalizeText(_ text: String) -> String {
         let normalizedText = text
             // Replace ligatures
-            .replacingOccurrences(of: "\u{FB00}", with: "ff") // ﬀ
-            .replacingOccurrences(of: "\u{FB01}", with: "fi") // ﬁ
-            .replacingOccurrences(of: "\u{FB02}", with: "fl") // ﬂ
-            .replacingOccurrences(of: "\u{FB03}", with: "ffi") // ﬃ
-            .replacingOccurrences(of: "\u{FB04}", with: "ffl") // ﬄ
-            .replacingOccurrences(of: "\u{FB05}", with: "ft") // ﬅ
-            .replacingOccurrences(of: "\u{FB06}", with: "st") // ﬆ
+            .replacingOccurrences(of: "\u{FB00}", with: "ff")
+            .replacingOccurrences(of: "\u{FB01}", with: "fi")
+            .replacingOccurrences(of: "\u{FB02}", with: "fl")
+            .replacingOccurrences(of: "\u{FB03}", with: "ffi")
+            .replacingOccurrences(of: "\u{FB04}", with: "ffl")
+            .replacingOccurrences(of: "\u{FB05}", with: "ft")
+            .replacingOccurrences(of: "\u{FB06}", with: "st")
             // Handle smart quotes and apostrophes
-            .replacingOccurrences(of: "\u{201C}", with: "\"") // Left double quotation mark
-            .replacingOccurrences(of: "\u{201D}", with: "\"") // Right double quotation mark
-            .replacingOccurrences(of: "\u{2018}", with: "'")  // Left single quotation mark
-            .replacingOccurrences(of: "\u{2019}", with: "'")  // Right single quotation mark
+            .replacingOccurrences(of: "\u{201C}", with: "\"")
+            .replacingOccurrences(of: "\u{201D}", with: "\"")
+            .replacingOccurrences(of: "\u{2018}", with: "'")
+            .replacingOccurrences(of: "\u{2019}", with: "'")
             // Replace dashes
-            .replacingOccurrences(of: "\u{2014}", with: "--") // Em dash
-            .replacingOccurrences(of: "\u{2013}", with: "-")  // En dash
-            // Remove hyphenation at line breaks
-            .replacingOccurrences(of: "-\n", with: "")        // Remove hyphen and line break
-            // Replace line breaks with spaces
+            .replacingOccurrences(of: "\u{2014}", with: "--")
+            .replacingOccurrences(of: "\u{2013}", with: "-")
+            // Normalize line breaks and spaces
+            .replacingOccurrences(of: "-\n", with: "")
             .replacingOccurrences(of: "\n", with: " ")
-            // Normalize unicode
-            .applyingTransform(.init("NFKD; [:Nonspacing Mark:] Remove;"), reverse: false) ?? text
-            // Replace multiple spaces with a single space
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased() // Make text case-insensitive
         
         return normalizedText
     }
@@ -190,6 +189,12 @@ struct PDFHighlighter {
         normalizedRange: Range<String.Index>
     ) -> NSRange? {
         // Extract the substring we're looking for from the normalized text
+        guard normalizedRange.lowerBound >= normalizedText.startIndex,
+              normalizedRange.upperBound <= normalizedText.endIndex else {
+            print("    ❌ Range out of bounds")
+            return nil
+        }
+        
         let targetSubstring = String(normalizedText[normalizedRange])
             .trimmingCharacters(in: .whitespacesAndNewlines)
         print("    🔍 Looking for: \"\(targetSubstring)\"")
@@ -210,16 +215,28 @@ struct PDFHighlighter {
             options: [.caseInsensitive, .diacriticInsensitive]
         ) {
             // For each occurrence of the first word, look for the last word in the remaining text
-            let remainingText = originalText[firstRange.upperBound...]
+            let remainingTextStart = firstRange.upperBound
+            guard remainingTextStart <= originalText.endIndex else { break }
+            
+            let remainingText = originalText[remainingTextStart...]
             if let lastRange = remainingText.range(
                 of: lastWord,
                 options: [.caseInsensitive, .diacriticInsensitive]
             ) {
-                // Get the full text range from start of first word to end of last word
-                let fullRange = firstRange.lowerBound...originalText.index(firstRange.upperBound, offsetBy: remainingText.distance(
-                    from: remainingText.startIndex,
-                    to: lastRange.upperBound
-                ))
+                // Calculate the full range safely
+                guard let fullRange = try? Range(
+                    uncheckedBounds: (
+                        lower: firstRange.lowerBound,
+                        upper: originalText.index(
+                            remainingTextStart,
+                            offsetBy: remainingText.distance(from: remainingText.startIndex, to: lastRange.upperBound),
+                            limitedBy: originalText.endIndex
+                        ) ?? originalText.endIndex
+                    )
+                ) else {
+                    print("    ⚠️ Invalid range calculation")
+                    continue
+                }
                 
                 // Extract and normalize the text in this range
                 let extractedText = String(originalText[fullRange])
@@ -235,7 +252,7 @@ struct PDFHighlighter {
                     .lowercased() == targetSubstring.components(separatedBy: .whitespacesAndNewlines)
                     .joined(separator: " ")
                     .lowercased() {
-                    // Convert to NSRange
+                    // Convert to NSRange safely
                     let utf16View = originalText.utf16
                     let startOffset = utf16View.distance(from: utf16View.startIndex, to: fullRange.lowerBound)
                     let endOffset = utf16View.distance(from: utf16View.startIndex, to: fullRange.upperBound)
@@ -283,5 +300,21 @@ struct PDFHighlighter {
         }
         
         return annotations
+    }
+
+    private func extractText(from originalText: String, range: NSRange) -> String? {
+        guard let stringRange = Range(range, in: originalText) else {
+            print("❌ Could not convert NSRange to String.Index range")
+            return nil
+        }
+        
+        // Validate range bounds before extraction
+        guard stringRange.lowerBound >= originalText.startIndex,
+              stringRange.upperBound <= originalText.endIndex else {
+            print("❌ Range is out of bounds")
+            return nil
+        }
+        
+        return String(originalText[stringRange])
     }
 }

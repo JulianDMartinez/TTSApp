@@ -500,8 +500,9 @@ enum InputMode {
             .joined(separator: " ")
             .lowercased()
         
-        // Split original text into sentences
+        // Split original text into sentences with word boundaries
         let sentenceTokenizer = NLTokenizer(unit: .sentence)
+        let wordTokenizer = NLTokenizer(unit: .word)
         sentenceTokenizer.string = originalText
         
         var bestMatch: (sentences: [String], score: Double) = ([], 0.0)
@@ -510,17 +511,32 @@ enum InputMode {
         // Lower threshold for better matching
         let threshold = max(0.6, Double(normalizedProcessed.count) / 100.0)
         
-        // Handle hyphenated words
-        let processedWords = normalizedProcessed.components(separatedBy: .whitespacesAndNewlines)
+        // Handle hyphenated words and sentence fragments
         var isHyphenated = false
+        var lastSentenceFragment = ""
         
         sentenceTokenizer.enumerateTokens(in: originalText.startIndex..<originalText.endIndex) { range, _ in
             let sentence = String(originalText[range])
-            let normalizedSentence = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+            var normalizedSentence = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
             
+            // If we have a fragment from previous iteration, prepend it
+            if !lastSentenceFragment.isEmpty {
+                normalizedSentence = lastSentenceFragment + " " + normalizedSentence
+                lastSentenceFragment = ""
+            }
+            
+            // Check if sentence ends with hyphen
             if normalizedSentence.hasSuffix("-") {
                 isHyphenated = true
                 currentSequence.append(normalizedSentence)
+                return true
+            }
+            
+            // Handle incomplete sentences
+            if !normalizedSentence.hasSuffix(".") && 
+               !normalizedSentence.hasSuffix("!") && 
+               !normalizedSentence.hasSuffix("?") {
+                lastSentenceFragment = normalizedSentence
                 return true
             }
             
@@ -531,7 +547,7 @@ enum InputMode {
             currentSequence.append(finalSentence)
             isHyphenated = false
             
-            // Calculate similarity score
+            // Calculate similarity score with word-level comparison
             let score = calculateSimilarityScore(between: normalizedProcessed, and: finalSentence.lowercased())
             
             if score > threshold {
@@ -540,6 +556,17 @@ enum InputMode {
             }
             
             return true
+        }
+        
+        // Handle any remaining fragment
+        if !lastSentenceFragment.isEmpty {
+            let finalSentence = currentSequence.last ?? ""
+            let combinedSentence = finalSentence + " " + lastSentenceFragment
+            let score = calculateSimilarityScore(between: normalizedProcessed, and: combinedSentence.lowercased())
+            
+            if score > threshold {
+                bestMatch = ([combinedSentence], score)
+            }
         }
         
         return bestMatch.score > 0.0 ? bestMatch.sentences : [processed]
