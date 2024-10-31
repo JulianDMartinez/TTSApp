@@ -83,6 +83,10 @@ extension ContentViewModel: TTSManagerDelegate {
     // MARK: - TTSManagerDelegate Methods
 
     func ttsManager(_ manager: TTSManager, willSpeakUtterance utterance: TTSUtterance) {
+        print("\n📢 Will speak utterance")
+        print("Original text: \"\(utterance.originalText)\"")
+        print("Processed text: \"\(utterance.text)\"")
+        
         DispatchQueue.main.async {
             self.currentSentenceOriginal = utterance.originalText
             self.currentSentence = utterance.text
@@ -100,6 +104,8 @@ extension ContentViewModel: TTSManagerDelegate {
     }
 
     func ttsManager(_ manager: TTSManager, willSpeakWord word: String) {
+        print("\n🗣️ Will speak word: \"\(word)\"")
+        
         DispatchQueue.main.async {
             self.currentWord = word
         }

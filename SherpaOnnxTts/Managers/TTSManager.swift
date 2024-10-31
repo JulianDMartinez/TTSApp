@@ -534,6 +534,10 @@ enum InputMode {
     }
 
     private func findOriginalSentence(processed: String, in originalText: String) -> String {
+        print("\n🔄 Finding original sentence")
+        print("Processed: \"\(processed)\"")
+        print("Original text length: \(originalText.count) characters")
+
         // Remove extra whitespace and normalize for comparison
         let normalizedProcessed = processed.trimmingCharacters(in: .whitespacesAndNewlines)
                                          .components(separatedBy: .whitespacesAndNewlines)
@@ -548,19 +552,25 @@ enum InputMode {
         
         sentenceTokenizer.enumerateTokens(in: originalText.startIndex..<originalText.endIndex) { range, _ in
             let originalSentence = String(originalText[range])
+            print("📝 Checking original sentence: \"\(originalSentence)\"")
+            
             let normalizedOriginal = originalSentence.trimmingCharacters(in: .whitespacesAndNewlines)
                                                    .components(separatedBy: .whitespacesAndNewlines)
                                                    .joined(separator: " ")
+            print("Normalized: \"\(normalizedOriginal)\"")
             
-            // Calculate similarity score
             let score = calculateSimilarityScore(between: normalizedProcessed, and: normalizedOriginal)
+            print("Similarity score: \(score)")
+            
             if score > bestMatchScore {
                 bestMatchScore = score
                 bestMatch = originalSentence
+                print("✅ New best match found!")
             }
             return true
         }
         
+        print("🎯 Final match: \"\(bestMatch)\"")
         return bestMatch
     }
 

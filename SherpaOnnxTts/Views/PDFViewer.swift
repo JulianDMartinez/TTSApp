@@ -23,24 +23,26 @@ struct PDFViewer: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: PDFView, context: Context) {
-        guard let document = uiView.document,
-              let page = document.page(at: currentPage) else { return }
+        print("\n🔄 PDFViewer update")
+        print("Current line: \"\(currentSentenceOriginal)\"")
+        print("Current word: \"\(currentWord)\"")
+
+        guard let document = uiView.document else {
+            print("❌ No document")
+            return
+        }
 
         var highlighter = PDFHighlighter(
             document: document,
             currentPageNumber: currentPage,
-            spokenText: spokenText,
             highlightWord: currentWord
         )
-        
-        let didHighlight = highlighter.highlightTextInDocument(
-            sentence: currentSentenceOriginal,
+
+        let didHighlight = highlighter.highlightLineInDocument(
+            lineText: currentSentenceOriginal,
             word: currentWord
         )
-        
-        // Scroll to the word annotation if needed
-//        if isTracking, let wordAnnotation = PDFHighlighter.currentWordAnnotation {
-//            uiView.go(to: wordAnnotation)
-//        }
+
+        print("✅ Highlight result: \(didHighlight)")
     }
 }
