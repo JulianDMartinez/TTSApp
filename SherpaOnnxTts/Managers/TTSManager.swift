@@ -153,73 +153,106 @@ enum InputMode {
     private func startWordTracking(for utterance: TTSUtterance) {
         print("Starting word tracking for utterance: \(utterance.text)")
         wordTrackingDisplayLink?.invalidate()
-
-        // Estimate word durations based on word length
-        let totalDuration = utterance.duration
-        let totalCharacters = utterance.words.reduce(0) { $0 + $1.count }
-
+        
+        // Reset currentWord before tracking
+        currentWord = ""
+        print("Reset currentWord to empty string")
+        
+        // Assign the current utterance
+        currentUtterance = utterance
+        print("Assigned currentUtterance: \(currentUtterance?.text ?? "nil")")
+        
         // Calculate timestamps for each word
+        let totalDuration = utterance.duration
+        let wordCount = Double(utterance.words.count)
+        
+        // Calculate timestamps with more natural spacing
         var accumulatedTime: Double = 0.0
         utterance.wordTimestamps = utterance.words.map { word in
-            let proportion = Double(word.count) / Double(totalCharacters)
-            let wordDuration = totalDuration * proportion
-            let timestamp = max(0, accumulatedTime - wordHighlightLeadTime)
-            accumulatedTime += wordDuration
-            return (word: word, timestamp: timestamp)
+            let baseDuration = totalDuration / wordCount
+            // Adjust duration based on word length (longer words take more time)
+            let lengthFactor = Double(word.count) / 5.0 // Assuming average word length is 5 characters
+            let adjustedDuration = baseDuration * max(0.5, min(1.5, lengthFactor))
+            
+            let timestamp = accumulatedTime
+            accumulatedTime += adjustedDuration
+            
+            return (word: word, timestamp: max(0, timestamp - wordHighlightLeadTime))
         }
-
-        audioStartTime = CACurrentMediaTime()
-
-        wordTrackingDisplayLink = CADisplayLink(target: self, selector: #selector(updateWordTracking))
-        wordTrackingDisplayLink?.preferredFramesPerSecond = 120
-        wordTrackingDisplayLink?.add(to: .main, forMode: .common)
+        
+        print("Word timestamps: \(utterance.wordTimestamps)")
+        
+        // Ensure we're on the main thread
+        DispatchQueue.main.async {
+            self.audioStartTime = CACurrentMediaTime()
+            
+            self.wordTrackingDisplayLink = CADisplayLink(target: self, selector: #selector(self.updateWordTracking))
+            self.wordTrackingDisplayLink?.preferredFramesPerSecond = 60
+            self.wordTrackingDisplayLink?.add(to: .main, forMode: .default)
+        }
     }
 
     @objc private func updateWordTracking() {
         print("Updating word tracking")
+        
         guard let utterance = currentUtterance,
               !utterance.wordTimestamps.isEmpty else {
+            print("No current utterance or empty timestamps")
             wordTrackingDisplayLink?.invalidate()
             return
         }
-        print("Current utterance: \(utterance.text)")
-
+        
         let currentTime = CACurrentMediaTime() - audioStartTime
+        print("Current time: \(currentTime)")
+        
         let totalDuration = utterance.duration
-
+        
         // Ensure we don't exceed the total duration
         if currentTime >= totalDuration {
+            print("Exceeded total duration: \(totalDuration)")
             wordTrackingDisplayLink?.invalidate()
+            delegate?.ttsManager(self, willSpeakWord: "")  // Clear highlight
             return
         }
-
-        // Find the word that should be highlighted at the current time
+        
+        // Find the current word based on timestamps
         var wordFound = false
         for (index, wordInfo) in utterance.wordTimestamps.enumerated() {
-            let wordStartTime = wordInfo.timestamp
-            let wordEndTime = (index < utterance.wordTimestamps.count - 1) ?
+            let nextTimestamp = index < utterance.wordTimestamps.count - 1 ?
                 utterance.wordTimestamps[index + 1].timestamp : totalDuration
-
-            if currentTime >= wordStartTime && currentTime < wordEndTime {
+                
+            print("Checking word: \(wordInfo.word), timestamp: \(wordInfo.timestamp), nextTimestamp: \(nextTimestamp)")
+            
+            if currentTime >= wordInfo.timestamp && currentTime < nextTimestamp {
+                print("Condition met for word: \(wordInfo.word)")
+                print("currentWord: '\(currentWord)', wordInfo.word: '\(wordInfo.word)'")
+                
+                wordFound = true
                 if currentWord != wordInfo.word {
                     currentWord = wordInfo.word
+                    print("🗣️ Highlighting word: \(wordInfo.word) at time: \(currentTime)")
                     delegate?.ttsManager(self, willSpeakWord: wordInfo.word)
                 }
-                wordFound = true
                 break
             }
         }
-
-        // Handle cases where currentTime is before the first word's timestamp
-        if !wordFound && currentTime < utterance.wordTimestamps.first!.timestamp {
-            currentWord = utterance.words.first!
-            delegate?.ttsManager(self, willSpeakWord: currentWord)
+        
+        // Handle the case where we're before the first word
+        if !wordFound {
+            let firstWord = utterance.wordTimestamps.first!.word
+            if currentWord != firstWord {
+                currentWord = firstWord
+                delegate?.ttsManager(self, willSpeakWord: firstWord)
+            }
         }
     }
 
     private func scheduleBuffer(_ buffer: AVAudioPCMBuffer, for utterance: TTSUtterance) {
-        startWordTracking(for: utterance)
-
+        DispatchQueue.main.async {
+            self.currentUtterance = utterance
+            self.startWordTracking(for: utterance)
+        }
+        
         playerNode.volume = volume
         playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             guard let self = self else { return }

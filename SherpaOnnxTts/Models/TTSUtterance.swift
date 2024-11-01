@@ -21,32 +21,36 @@ class TTSUtterance {
     init(originalTexts: [String], processedText: String, pageNumber: Int? = nil) {
         self.originalTexts = originalTexts
         self.text = processedText
+        self.pageNumber = pageNumber
         
-        // Initialize word tokenizer
+        // Initialize word tokenizer with better options
         let wordTokenizer = NLTokenizer(unit: .word)
         wordTokenizer.string = processedText
         
         // Get word tokens with their ranges
         var words: [String] = []
-        wordTokenizer.enumerateTokens(in: processedText.startIndex..<processedText.endIndex) { range, attributes in
-            let word = String(processedText[range])
-            if !word.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let range = processedText.startIndex..<processedText.endIndex
+        
+        wordTokenizer.enumerateTokens(in: range) { tokenRange, attributes in
+            let word = String(processedText[tokenRange])
+            // Only include actual words, not whitespace or punctuation
+            if !word.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+               !word.trimmingCharacters(in: .punctuationCharacters).isEmpty {
                 words.append(word)
             }
             return true
         }
         
         self.words = words
-        self.pageNumber = pageNumber
         
-        // Detect if this is a title based on characteristics
+        // Detect if this is a title
         self.isTitle = originalTexts.allSatisfy { text in
             let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmedText.split(separator: "\n").count == 1 && 
-                   !trimmedText.contains(".") && 
-                   trimmedText.count < 100 && 
-                   !trimmedText.hasSuffix("?") && 
-                   !trimmedText.hasSuffix("!")
+            return trimmedText.split(separator: "\n").count == 1 &&
+                   !trimmedText.hasSuffix(".") &&
+                   !trimmedText.hasSuffix("?") &&
+                   !trimmedText.hasSuffix("!") &&
+                   trimmedText.count < 100
         }
     }
 
