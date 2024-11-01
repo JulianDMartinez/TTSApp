@@ -15,12 +15,17 @@ public struct WordInfo {
     let syllableCount: Int
 }
 
+struct ChunkInfo {
+    let chunk: String
+    let timestamp: Double
+    let duration: Double
+}
+
 class TTSUtterance {
     let originalTexts: [String]
     let text: String
-    let words: [String]
-    var wordTimestamps: [(word: String, timestamp: Double)] = []
-    var wordInfos: [WordInfo] = []
+    var chunks: [String] = []
+    var chunkInfos: [ChunkInfo] = []
     var duration: Double = 0.0
     let pageNumber: Int?
     
@@ -29,20 +34,31 @@ class TTSUtterance {
         self.text = processedText
         self.pageNumber = pageNumber
         
-        let wordTokenizer = NLTokenizer(unit: .word)
-        wordTokenizer.string = processedText
-        
-        var words: [String] = []
-        let range = processedText.startIndex..<processedText.endIndex
-        
-        wordTokenizer.enumerateTokens(in: range) { tokenRange, _ in
-            let word = String(processedText[tokenRange])
-            if !word.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                words.append(word)
-            }
-            return true
-        }
-        
-        self.words = words
+        // Tokenize the sentence into chunks
+        self.chunks = tokenizeSentenceIntoChunks(processedText)
     }
+}
+
+func tokenizeSentenceIntoChunks(_ sentence: String) -> [String] {
+    // Split the sentence into words
+    let words = sentence.components(separatedBy: .whitespacesAndNewlines)
+        .filter { !$0.isEmpty }
+    
+    var chunks: [String] = []
+    var currentChunk = ""
+    let maxWordsPerChunk = 5 // Adjust as needed
+    
+    for word in words {
+        currentChunk += currentChunk.isEmpty ? word : " \(word)"
+        if currentChunk.components(separatedBy: .whitespaces).count >= maxWordsPerChunk {
+            chunks.append(currentChunk)
+            currentChunk = ""
+        }
+    }
+    
+    if !currentChunk.isEmpty {
+        chunks.append(currentChunk)
+    }
+    
+    return chunks
 }

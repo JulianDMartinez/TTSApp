@@ -155,63 +155,37 @@ enum InputMode {
         }
     }
 
-    private func startWordTracking(for utterance: TTSUtterance) {
+    private func startChunkTracking(for utterance: TTSUtterance) {
         DispatchQueue.main.async {
-            self.delegate?.ttsManager(self, willSpeakWord: "", atIndex: -1)
+            self.delegate?.ttsManager(self, willSpeakChunk: "", atIndex: -1)
         }
 
-        print("Starting word tracking for utterance: \(utterance.text)")
+        print("Starting chunk tracking for utterance: \(utterance.text)")
         wordTrackingDisplayLink?.invalidate()
 
         currentWord = ""
-        currentWordIndex = 0
+        currentWordIndex = -1
 
-        // Calculate syllable-based timing with refined estimation
-        let totalSyllables = utterance.words.reduce(0) { $0 + syllableCount(for: $1) }
-        let averageWordLength = utterance.words.reduce(0) { $0 + $1.count } / utterance.words.count
-        let durationPerSyllable = utterance.duration / Double(max(totalSyllables, 1))
+        // Calculate character counts for each chunk
+        let characterCounts = utterance.chunks.map { $0.count }
+        let totalCharacters = characterCounts.reduce(0, +)
 
         var accumulatedTime: Double = 0.0
+        utterance.chunkInfos = []
 
-        // Adjust pause durations based on punctuation
-        let punctuationPauseDurations: [Character: Double] = [
-            ",": 0.2,
-            ".": 0.4,
-            "!": 0.4,
-            "?": 0.4,
-            ";": 0.3,
-            ":": 0.3,
-        ]
-
-        // Create word infos with timing
-        utterance.wordInfos = utterance.words.map { word in
-            let syllables = syllableCount(for: word)
-            let wordLengthFactor = Double(word.count) / Double(averageWordLength)
-            let wordDuration = max(
-                durationPerSyllable * Double(syllables) * wordLengthFactor,
-                0.05
-            ) // Minimum duration
+        for (index, chunk) in utterance.chunks.enumerated() {
+            let chunkCharacters = characterCounts[index]
+            let chunkDuration = utterance.duration * (Double(chunkCharacters) / Double(max(totalCharacters, 1)))
             let timestamp = accumulatedTime
 
-            accumulatedTime += wordDuration
+            accumulatedTime += chunkDuration
 
-            // Add pause after punctuation
-            if let lastChar = word.last, let pause = punctuationPauseDurations[lastChar] {
-                accumulatedTime += pause
-            }
-
-            return WordInfo(
-                word: word,
+            let chunkInfo = ChunkInfo(
+                chunk: chunk,
                 timestamp: max(0, timestamp - wordHighlightLeadTime),
-                duration: wordDuration,
-                syllableCount: syllables
+                duration: chunkDuration
             )
-        }
-
-        // Debug log word timings
-        print("Word timing breakdown:")
-        utterance.wordInfos.forEach { info in
-            print("Word: \(info.word), Start: \(info.timestamp), Duration: \(info.duration)")
+            utterance.chunkInfos.append(chunkInfo)
         }
 
         currentUtterance = utterance
@@ -219,28 +193,14 @@ enum InputMode {
         DispatchQueue.main.async {
             self.wordTrackingDisplayLink = CADisplayLink(
                 target: self,
-                selector: #selector(self.updateWordTracking)
+                selector: #selector(self.updateChunkTracking)
             )
             self.wordTrackingDisplayLink?.preferredFramesPerSecond = 60
             self.wordTrackingDisplayLink?.add(to: .main, forMode: .default)
         }
     }
-    
-    func AudioTimeStampToSeconds(_ hostTime: UInt64) -> Double {
-        var timebaseInfo = mach_timebase_info_data_t()
-        mach_timebase_info(&timebaseInfo)
-        let nanoseconds = (hostTime * UInt64(timebaseInfo.numer)) / UInt64(timebaseInfo.denom)
-        return Double(nanoseconds) / 1_000_000_000.0
-    }
-    
-    private func hostTimeToSeconds(_ hostTime: UInt64) -> Double {
-        var timebaseInfo = mach_timebase_info_data_t()
-        mach_timebase_info(&timebaseInfo)
-        let nanoseconds = (hostTime * UInt64(timebaseInfo.numer)) / UInt64(timebaseInfo.denom)
-        return Double(nanoseconds) / 1_000_000_000.0
-    }
 
-    @objc private func updateWordTracking() {
+    @objc private func updateChunkTracking() {
         guard let utterance = currentUtterance else {
             wordTrackingDisplayLink?.invalidate()
             return
@@ -257,37 +217,28 @@ enum InputMode {
         if outputLatency > 0 {
             elapsedTime -= outputLatency
         } else {
-            // Adjust for audio engine latency if output latency is not available
             elapsedTime -= audioEngineLatency
         }
-
-        // Debug logging
-        print("UpdateWordTracking - Current playback time: \(elapsedTime)")
 
         // Check if elapsedTime exceeds utterance duration
         if elapsedTime >= (utterance.duration + 0.1) {
             wordTrackingDisplayLink?.invalidate()
             DispatchQueue.main.async {
-                self.delegate?.ttsManager(self, willSpeakWord: "", atIndex: -1)
+                self.delegate?.ttsManager(self, willSpeakChunk: "", atIndex: -1)
             }
-            print("UpdateWordTracking - Exceeded utterance duration. Stopping word tracking.")
             return
         }
 
-        // Find the current word based on timing
-        for (index, wordInfo) in utterance.wordInfos.enumerated() {
-            let wordEndTime = wordInfo.timestamp + wordInfo.duration
+        // Find the current chunk based on timing
+        for (index, chunkInfo) in utterance.chunkInfos.enumerated() {
+            let chunkEndTime = chunkInfo.timestamp + chunkInfo.duration
 
-            // Log expected vs. actual times
-            print("Expected word start time: \(wordInfo.timestamp), Current playback time: \(elapsedTime)")
-
-            if elapsedTime >= wordInfo.timestamp && elapsedTime < wordEndTime {
+            if elapsedTime >= chunkInfo.timestamp && elapsedTime < chunkEndTime {
                 if currentWordIndex != index {
-                    currentWord = wordInfo.word
+                    currentWord = chunkInfo.chunk
                     currentWordIndex = index
-                    print("🗣️ Word timing - word: \(wordInfo.word), start: \(wordInfo.timestamp), end: \(wordEndTime)")
                     DispatchQueue.main.async {
-                        self.delegate?.ttsManager(self, willSpeakWord: wordInfo.word, atIndex: index)
+                        self.delegate?.ttsManager(self, willSpeakChunk: chunkInfo.chunk, atIndex: index)
                     }
                 }
                 return
@@ -295,10 +246,24 @@ enum InputMode {
         }
     }
 
+    func AudioTimeStampToSeconds(_ hostTime: UInt64) -> Double {
+        var timebaseInfo = mach_timebase_info_data_t()
+        mach_timebase_info(&timebaseInfo)
+        let nanoseconds = (hostTime * UInt64(timebaseInfo.numer)) / UInt64(timebaseInfo.denom)
+        return Double(nanoseconds) / 1_000_000_000.0
+    }
+    
+    private func hostTimeToSeconds(_ hostTime: UInt64) -> Double {
+        var timebaseInfo = mach_timebase_info_data_t()
+        mach_timebase_info(&timebaseInfo)
+        let nanoseconds = (hostTime * UInt64(timebaseInfo.numer)) / UInt64(timebaseInfo.denom)
+        return Double(nanoseconds) / 1_000_000_000.0
+    }
+
     private func scheduleBuffer(_ buffer: AVAudioPCMBuffer, for utterance: TTSUtterance) {
         DispatchQueue.main.async {
             self.currentUtterance = utterance
-            self.startWordTracking(for: utterance)
+            self.startChunkTracking(for: utterance)
         }
 
         playerNode.volume = volume
@@ -646,5 +611,5 @@ enum InputMode {
 protocol TTSManagerDelegate: AnyObject {
     func ttsManager(_ manager: TTSManager, didFinishUtterance utterance: TTSUtterance)
     func ttsManager(_ manager: TTSManager, willSpeakUtterance utterance: TTSUtterance)
-    func ttsManager(_ manager: TTSManager, willSpeakWord word: String, atIndex index: Int)
+    func ttsManager(_ manager: TTSManager, willSpeakChunk chunk: String, atIndex index: Int)
 }

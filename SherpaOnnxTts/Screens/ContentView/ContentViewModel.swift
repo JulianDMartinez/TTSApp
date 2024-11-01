@@ -127,4 +127,13 @@ extension ContentViewModel: TTSManagerDelegate {
             self.pdfHighlighter?.updateWordHighlight(word: word, atIndex: index)
         }
     }
+
+    func ttsManager(_ manager: TTSManager, willSpeakChunk chunk: String, atIndex index: Int) {
+        print("\n🗣️ Will speak chunk: \"\(chunk)\" at index \(index)")
+        
+        DispatchQueue.main.async {
+            self.currentWord = chunk
+            self.pdfHighlighter?.updateChunkHighlight(chunk: chunk, atIndex: index)
+        }
+    }
 }

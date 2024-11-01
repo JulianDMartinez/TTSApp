@@ -15,6 +15,7 @@ struct PDFHighlighter {
 
     static var currentSentenceAnnotations: [PDFAnnotation] = []
     static var currentWordAnnotation: PDFAnnotation?
+    static var currentChunkAnnotations: [PDFAnnotation] = []
 
     var lastHighlightedRange: NSRange?
 
@@ -23,6 +24,9 @@ struct PDFHighlighter {
 
     // Add new property to store word ranges
     private var wordRangesInSentence: [NSRange] = []
+
+    // Add property to store chunk ranges
+    private var chunkRangesInSentence: [NSRange] = []
 
     init(document: PDFDocument, currentPageNumber: Int) {
         self.document = document
@@ -36,6 +40,9 @@ struct PDFHighlighter {
             page.removeAnnotation(wordAnnotation)
             PDFHighlighter.currentWordAnnotation = nil
         }
+        
+        // Also clear chunk highlights
+        clearChunkHighlights()
     }
 
     mutating func clearSentenceHighlights() {
@@ -95,6 +102,12 @@ struct PDFHighlighter {
                         
                         // Store the word ranges in the sentence
                         storeWordRangesInSentence(
+                            sentenceRange: originalRange,
+                            pageContent: pageContent
+                        )
+
+                        // Store the chunk ranges in the sentence
+                        storeChunkRangesInSentence(
                             sentenceRange: originalRange,
                             pageContent: pageContent
                         )
@@ -358,5 +371,92 @@ struct PDFHighlighter {
         }
         
         print("📚 Total word ranges stored: \(wordRangesInSentence.count)")
+    }
+
+    private mutating func storeChunkRangesInSentence(
+        sentenceRange: NSRange,
+        pageContent: String
+    ) {
+        guard let stringRange = Range(sentenceRange, in: pageContent) else { return }
+        let sentenceText = String(pageContent[stringRange])
+        
+        let chunks = tokenizeSentenceIntoChunks(sentenceText)
+        
+        var currentLocation = sentenceRange.location
+        chunkRangesInSentence.removeAll()
+        
+        for chunk in chunks {
+            let chunkLength = (chunk as NSString).length
+            let adjustedRange = NSRange(location: currentLocation, length: chunkLength)
+            chunkRangesInSentence.append(adjustedRange)
+            print("📝 Stored chunk range: \(adjustedRange) for chunk: '\(chunk)'")
+            currentLocation += chunkLength + 1 // +1 for the delimiter
+        }
+        
+        print("📚 Total chunk ranges stored: \(chunkRangesInSentence.count)")
+    }
+
+    mutating func updateChunkHighlight(chunk: String, atIndex index: Int) {
+        guard let currentPage = document.page(at: currentPageNumber) else { return }
+        clearWordHighlight()
+        handleChunkHighlighting(
+            chunk: chunk,
+            atIndex: index,
+            currentPage: currentPage
+        )
+    }
+
+    private mutating func handleChunkHighlighting(
+        chunk: String,
+        atIndex index: Int,
+        currentPage: PDFPage
+    ) {
+        print("🔍 Handling chunk highlight for: '\(chunk)' at index \(index)")
+        print("📊 Available chunk ranges: \(chunkRangesInSentence.count)")
+        
+        // Clear existing chunk highlights
+        clearChunkHighlights()
+        
+        guard index >= 0, index < chunkRangesInSentence.count else {
+            print("⚠️ Chunk index \(index) out of bounds")
+            return
+        }
+        
+        let chunkRange = chunkRangesInSentence[index]
+        print("✨ Using chunk range: \(chunkRange)")
+        
+        if let selection = currentPage.selection(for: chunkRange) {
+            // Split selection into lines
+            let lineSelections = selection.selectionsByLine()
+            var annotations: [PDFAnnotation] = []
+            
+            for lineSelection in lineSelections {
+                let lineBounds = lineSelection.bounds(for: currentPage)
+                print("✨ Creating chunk highlight at line bounds: \(lineBounds)")
+                
+                let chunkAnnotation = RoundedHighlightAnnotation(
+                    bounds: lineBounds,
+                    forType: .highlight,
+                    withProperties: nil
+                )
+                chunkAnnotation.color = UIColor.orange.withAlphaComponent(0.3)
+                currentPage.addAnnotation(chunkAnnotation)
+                annotations.append(chunkAnnotation)
+            }
+            
+            // Store annotations for later removal
+            PDFHighlighter.currentChunkAnnotations = annotations
+        } else {
+            print("⚠️ Could not create selection for chunk at index \(index)")
+        }
+    }
+
+    mutating func clearChunkHighlights() {
+        guard let page = document.page(at: currentPageNumber) else { return }
+        
+        for annotation in PDFHighlighter.currentChunkAnnotations {
+            page.removeAnnotation(annotation)
+        }
+        PDFHighlighter.currentChunkAnnotations.removeAll()
     }
 }
