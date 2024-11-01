@@ -17,6 +17,9 @@ struct PDFHighlighter {
 
     var lastHighlightedRange: NSRange?
 
+    // Add new property to track current sentence bounds
+    private var currentSentenceBounds: CGRect?
+
     init(document: PDFDocument, currentPageNumber: Int) {
         self.document = document
         self.currentPageNumber = currentPageNumber
@@ -46,6 +49,7 @@ struct PDFHighlighter {
     ///   - lineTexts: Array of text lines to highlight
     /// - Returns: Boolean indicating if any highlights were successfully added
     mutating func highlightLinesInDocument(lineTexts: [String]) -> Bool {
+        print("📚 Highlighting lines: \(lineTexts)")
         guard let currentPage = document.page(at: currentPageNumber) else { return false }
 
         clearSentenceHighlights()
@@ -90,6 +94,12 @@ struct PDFHighlighter {
             }
         }
 
+        // After creating line annotations, set the sentence bounds
+        if let firstAnnotation = PDFHighlighter.currentSentenceAnnotations.first {
+            setCurrentSentenceBounds(firstAnnotation.bounds)
+            print("📏 Set sentence bounds from annotation: \(firstAnnotation.bounds)")
+        }
+
         return didHighlightAny
     }
 
@@ -103,42 +113,38 @@ struct PDFHighlighter {
         currentPage: PDFPage,
         lineBounds: CGRect? = nil
     ) {
-        // Clear only the word highlight
-        if let wordAnnotation = PDFHighlighter.currentWordAnnotation {
-            currentPage.removeAnnotation(wordAnnotation)
-            PDFHighlighter.currentWordAnnotation = nil
-        }
+        print("🔍 Handling word highlight for: '\(word)'")
+        
+        clearWordHighlight()
         
         let normalizedWord = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        print("📝 Normalized word: '\(normalizedWord)'")
 
         let wordSelections = document.findString(
             normalizedWord,
             withOptions: [.caseInsensitive, .diacriticInsensitive]
         )
 
-        // Filter selections to those on the current page and after last highlighted range
-        let matchesOnPage = wordSelections.filter { selection in
-            guard selection.pages.contains(currentPage) else { return false }
+        // Filter selections to those within the current sentence bounds
+        let matchesInSentence = wordSelections.filter { selection in
+            guard selection.pages.contains(currentPage),
+                  let sentenceBounds = currentSentenceBounds else { return false }
             
-            if let lastRange = lastHighlightedRange {
-                // Ensure the selection comes after the last highlighted range
-                let selectionRange = selection.range(at: 0, on: currentPage)
-                return selectionRange.location > lastRange.location
-            }
-            return true
+            let wordBounds = selection.bounds(for: currentPage)
+            let isInSentence = wordBounds.intersects(sentenceBounds)
+            print("📍 Word bounds: \(wordBounds), in sentence: \(isInSentence)")
+            return isInSentence
         }
 
-        guard let selection = matchesOnPage.first else {
-            print("No matches found for word: \(normalizedWord)")
+        guard let selection = matchesInSentence.first else {
+            print("⚠️ No matches found for word: '\(normalizedWord)' in current sentence")
             return
         }
-        
-        // Update lastHighlightedRange
-        lastHighlightedRange = selection.range(at: 0, on: currentPage)
 
-        // Proceed with highlighting
+        // Create and add the word annotation
         let wordBounds = selection.bounds(for: currentPage)
-
+        print("✨ Creating word highlight at bounds: \(wordBounds)")
+        
         let wordAnnotation = RoundedHighlightAnnotation(
             bounds: wordBounds,
             forType: .highlight,
@@ -306,5 +312,11 @@ struct PDFHighlighter {
             word: word,
             currentPage: currentPage
         )
+    }
+
+    // Add method to set current sentence bounds
+    mutating func setCurrentSentenceBounds(_ bounds: CGRect) {
+        print("📏 Setting current sentence bounds: \(bounds)")
+        currentSentenceBounds = bounds
     }
 }
