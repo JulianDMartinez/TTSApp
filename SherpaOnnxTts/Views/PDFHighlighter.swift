@@ -94,10 +94,13 @@ struct PDFHighlighter {
             }
         }
 
-        // After creating line annotations, set the sentence bounds
-        if let firstAnnotation = PDFHighlighter.currentSentenceAnnotations.first {
-            setCurrentSentenceBounds(firstAnnotation.bounds)
-            print("📏 Set sentence bounds from annotation: \(firstAnnotation.bounds)")
+        // After creating line annotations, set the sentence bounds to encompass all the annotations
+        if !PDFHighlighter.currentSentenceAnnotations.isEmpty {
+            let sentenceBounds = PDFHighlighter.currentSentenceAnnotations.reduce(PDFHighlighter.currentSentenceAnnotations[0].bounds) { 
+                $0.union($1.bounds) 
+            }
+            setCurrentSentenceBounds(sentenceBounds)
+            print("📏 Set sentence bounds from annotations union: \(sentenceBounds)")
         }
 
         return didHighlightAny
@@ -128,11 +131,15 @@ struct PDFHighlighter {
         // Filter selections to those within the current sentence bounds
         let matchesInSentence = wordSelections.filter { selection in
             guard selection.pages.contains(currentPage),
-                  let sentenceBounds = currentSentenceBounds else { return false }
+                  let sentenceBounds = currentSentenceBounds else { 
+                print("⚠️ No sentence bounds available")
+                return false 
+            }
             
             let wordBounds = selection.bounds(for: currentPage)
+            // Use intersects instead of contains for more flexible matching
             let isInSentence = wordBounds.intersects(sentenceBounds)
-            print("📍 Word bounds: \(wordBounds), in sentence: \(isInSentence)")
+            print("📍 Word bounds: \(wordBounds), sentence bounds: \(sentenceBounds), intersects: \(isInSentence)")
             return isInSentence
         }
 
@@ -318,5 +325,18 @@ struct PDFHighlighter {
     mutating func setCurrentSentenceBounds(_ bounds: CGRect) {
         print("📏 Setting current sentence bounds: \(bounds)")
         currentSentenceBounds = bounds
+    }
+
+    // Add this method after setCurrentSentenceBounds:
+    private func debugSentenceBounds() {
+        if let bounds = currentSentenceBounds {
+            print("""
+            🔍 Current sentence bounds:
+            x: \(bounds.origin.x), y: \(bounds.origin.y)
+            width: \(bounds.size.width), height: \(bounds.size.height)
+            """)
+        } else {
+            print("⚠️ No sentence bounds set")
+        }
     }
 }
