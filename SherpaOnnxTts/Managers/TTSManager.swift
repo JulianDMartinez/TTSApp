@@ -85,7 +85,7 @@ enum InputMode {
     func speak(_ text: String, pageNumber: Int? = nil) {
         // Store the original text when speaking
         originalText = text
-        
+
         print("originalText: \(originalText)")
         Task {
             await processText(text, pageNumber: pageNumber)
@@ -151,6 +151,7 @@ enum InputMode {
     }
 
     private func startWordTracking(for utterance: TTSUtterance) {
+        print("Starting word tracking for utterance: \(utterance.text)")
         wordTrackingDisplayLink?.invalidate()
 
         // Estimate word durations based on word length
@@ -175,11 +176,13 @@ enum InputMode {
     }
 
     @objc private func updateWordTracking() {
+        print("Updating word tracking")
         guard let utterance = currentUtterance,
               !utterance.wordTimestamps.isEmpty else {
             wordTrackingDisplayLink?.invalidate()
             return
         }
+        print("Current utterance: \(utterance.text)")
 
         let currentTime = CACurrentMediaTime() - audioStartTime
         let totalDuration = utterance.duration
@@ -215,6 +218,8 @@ enum InputMode {
     }
 
     private func scheduleBuffer(_ buffer: AVAudioPCMBuffer, for utterance: TTSUtterance) {
+        startWordTracking(for: utterance)
+
         playerNode.volume = volume
         playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             guard let self = self else { return }
@@ -326,76 +331,6 @@ enum InputMode {
         return nil
     }
 
-    private func processNextUtterance() {
-        guard isSpeaking, let utterance = utteranceQueue.first else {
-            isSpeaking = false
-            return
-        }
-
-        currentUtterance = utterance
-        isSpeaking = true
-
-        // Generate audio for the entire utterance
-        let audio = tts.generate(text: utterance.text, sid: speakerId, speed: rate)
-
-        // Calculate utterance duration based on sample count and sample rate
-        utterance.duration = Double(audio.samples.count) / 22050.0 // Using known sample rate
-
-        // Calculate word timings
-        let wordsCount = Double(utterance.words.count)
-        let timePerWord = utterance.duration / wordsCount
-
-        // Create timestamps for each word
-        utterance.wordTimestamps = utterance.words.enumerated().map { index, word in
-            let timestamp = timePerWord * Double(index)
-            return (word: word, timestamp: max(0, timestamp))
-        }
-
-        // Create and schedule audio buffer
-        let mainMixerFormat = audioEngine.mainMixerNode.outputFormat(forBus: 0)
-        let format = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: mainMixerFormat.sampleRate,
-            channels: mainMixerFormat.channelCount,
-            interleaved: false
-        )!
-
-        let frameCount = UInt32(audio.samples.count)
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
-        buffer.frameLength = frameCount
-
-        // Copy samples to buffer
-        if let channelData = buffer.floatChannelData {
-            audio.samples.withUnsafeBufferPointer { samples in
-                for channel in 0 ..< Int(format.channelCount) {
-                    for i in 0 ..< Int(frameCount) {
-                        channelData[channel][i] = samples[i]
-                    }
-                }
-            }
-        }
-
-        // Start word tracking before playing
-        startWordTracking(for: utterance)
-
-        playerNode.volume = volume
-        playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
-            guard let self = self else { return }
-            Task { @MainActor in
-                self.wordTrackingDisplayLink?.invalidate()
-                self.delegate?.ttsManager(self, didFinishUtterance: utterance)
-                if !self.utteranceQueue.isEmpty {
-                    self.utteranceQueue.removeFirst()
-                }
-                self.processNextUtterance()
-            }
-        }
-
-        if !playerNode.isPlaying {
-            playerNode.play()
-        }
-    }
-
     func loadPDF(from url: URL) -> [String] {
         return pdfManager.loadPDF(from: url)
     }
@@ -493,82 +428,88 @@ enum InputMode {
     private func findOriginalSentences(processed: String, in originalText: String) -> [String] {
         print("\n🔄 Finding original sentences")
         print("Processed text: \"\(processed)\"")
-        
+
         // Normalize the processed text
         let normalizedProcessed = processed.trimmingCharacters(in: .whitespacesAndNewlines)
             .components(separatedBy: .whitespacesAndNewlines)
             .joined(separator: " ")
             .lowercased()
-        
+
         // Split original text into sentences with word boundaries
         let sentenceTokenizer = NLTokenizer(unit: .sentence)
         let wordTokenizer = NLTokenizer(unit: .word)
         sentenceTokenizer.string = originalText
-        
+
         var bestMatch: (sentences: [String], score: Double) = ([], 0.0)
         var currentSequence: [String] = []
-        
+
         // Lower threshold for better matching
         let threshold = max(0.6, Double(normalizedProcessed.count) / 100.0)
-        
+
         // Handle hyphenated words and sentence fragments
         var isHyphenated = false
         var lastSentenceFragment = ""
-        
-        sentenceTokenizer.enumerateTokens(in: originalText.startIndex..<originalText.endIndex) { range, _ in
+
+        sentenceTokenizer.enumerateTokens(in: originalText.startIndex ..< originalText.endIndex) { range, _ in
             let sentence = String(originalText[range])
             var normalizedSentence = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
-            
+
             // If we have a fragment from previous iteration, prepend it
             if !lastSentenceFragment.isEmpty {
                 normalizedSentence = lastSentenceFragment + " " + normalizedSentence
                 lastSentenceFragment = ""
             }
-            
+
             // Check if sentence ends with hyphen
             if normalizedSentence.hasSuffix("-") {
                 isHyphenated = true
                 currentSequence.append(normalizedSentence)
                 return true
             }
-            
+
             // Handle incomplete sentences
-            if !normalizedSentence.hasSuffix(".") && 
-               !normalizedSentence.hasSuffix("!") && 
-               !normalizedSentence.hasSuffix("?") {
+            if !normalizedSentence.hasSuffix(".") &&
+                !normalizedSentence.hasSuffix("!") &&
+                !normalizedSentence.hasSuffix("?") {
                 lastSentenceFragment = normalizedSentence
                 return true
             }
-            
-            let finalSentence = isHyphenated ? 
-                currentSequence.joined() + normalizedSentence : 
+
+            let finalSentence = isHyphenated ?
+                currentSequence.joined() + normalizedSentence :
                 normalizedSentence
-            
+
             currentSequence.append(finalSentence)
             isHyphenated = false
-            
+
             // Calculate similarity score with word-level comparison
-            let score = calculateSimilarityScore(between: normalizedProcessed, and: finalSentence.lowercased())
-            
+            let score = calculateSimilarityScore(
+                between: normalizedProcessed,
+                and: finalSentence.lowercased()
+            )
+
             if score > threshold {
                 bestMatch = ([finalSentence], score)
                 return false
             }
-            
+
             return true
         }
-        
+
         // Handle any remaining fragment
         if !lastSentenceFragment.isEmpty {
             let finalSentence = currentSequence.last ?? ""
             let combinedSentence = finalSentence + " " + lastSentenceFragment
-            let score = calculateSimilarityScore(between: normalizedProcessed, and: combinedSentence.lowercased())
-            
+            let score = calculateSimilarityScore(
+                between: normalizedProcessed,
+                and: combinedSentence.lowercased()
+            )
+
             if score > threshold {
                 bestMatch = ([combinedSentence], score)
             }
         }
-        
+
         return bestMatch.score > 0.0 ? bestMatch.sentences : [processed]
     }
 
@@ -678,6 +619,19 @@ enum InputMode {
                             }
                         }
                     }
+                }
+
+                // Calculate utterance duration based on sample count and sample rate
+                utterance.duration = Double(audio.samples.count) / 22050.0 // Using known sample rate
+
+                // Calculate word timings
+                let wordsCount = Double(utterance.words.count)
+                let timePerWord = utterance.duration / wordsCount
+
+                // Create timestamps for each word
+                utterance.wordTimestamps = utterance.words.enumerated().map { index, word in
+                    let timestamp = timePerWord * Double(index)
+                    return (word: word, timestamp: max(0, timestamp))
                 }
 
                 // Add to preprocessed buffers
