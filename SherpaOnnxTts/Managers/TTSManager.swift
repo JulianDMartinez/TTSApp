@@ -64,13 +64,16 @@ enum InputMode {
 
     // Word timing properties
     private var wordTrackingDisplayLink: CADisplayLink?
-    private var audioStartTime: Double = 0.0
-    private let wordHighlightLeadTime: Double = 0.05 // 50ms lead time
+    private var audioStartTime: UInt64 = 0
+    private let wordHighlightLeadTime: Double = 0.1 // Increased to 100ms lead time
 
     // Original text for sentence matching
     private var originalText: String = ""
 
     private var currentWordIndex: Int = 0
+
+    // Audio engine latency
+    private var audioEngineLatency: Double = 0.0
 
     // MARK: - Initialization
     init() {
@@ -89,7 +92,8 @@ enum InputMode {
         }
     }
 
-    private func generateAudioBuffer(for utterance: TTSUtterance) async -> (buffer: AVAudioPCMBuffer, sampleRate: Int)? {
+    private func generateAudioBuffer(for utterance: TTSUtterance) async
+        -> (buffer: AVAudioPCMBuffer, sampleRate: Int)? {
         return await withCheckedContinuation { continuation in
             self.preprocessingQueue.async {
                 let audio = self.tts.generate(
@@ -104,7 +108,7 @@ enum InputMode {
                 // Create buffer with TTS format matching hardware channels
                 let format = AVAudioFormat(
                     commonFormat: .pcmFormatFloat32,
-                    sampleRate: 22050,
+                    sampleRate: Double(audio.sampleRate),
                     channels: hwFormat.channelCount,
                     interleaved: false
                 )!
@@ -152,7 +156,9 @@ enum InputMode {
     }
 
     private func startWordTracking(for utterance: TTSUtterance) {
-        delegate?.ttsManager(self, willSpeakWord: "", atIndex: -1)
+        DispatchQueue.main.async {
+            self.delegate?.ttsManager(self, willSpeakWord: "", atIndex: -1)
+        }
 
         print("Starting word tracking for utterance: \(utterance.text)")
         wordTrackingDisplayLink?.invalidate()
@@ -160,25 +166,39 @@ enum InputMode {
         currentWord = ""
         currentWordIndex = 0
 
-        // Calculate syllable-based timing
+        // Calculate syllable-based timing with refined estimation
         let totalSyllables = utterance.words.reduce(0) { $0 + syllableCount(for: $1) }
+        let averageWordLength = utterance.words.reduce(0) { $0 + $1.count } / utterance.words.count
         let durationPerSyllable = utterance.duration / Double(max(totalSyllables, 1))
 
         var accumulatedTime: Double = 0.0
-        let pauseDuration: Double = 0.15 // Slightly reduced pause duration
+
+        // Adjust pause durations based on punctuation
+        let punctuationPauseDurations: [Character: Double] = [
+            ",": 0.2,
+            ".": 0.4,
+            "!": 0.4,
+            "?": 0.4,
+            ";": 0.3,
+            ":": 0.3,
+        ]
 
         // Create word infos with timing
         utterance.wordInfos = utterance.words.map { word in
             let syllables = syllableCount(for: word)
-            let wordDuration = max(durationPerSyllable * Double(syllables), 0.05) // Minimum duration
+            let wordLengthFactor = Double(word.count) / Double(averageWordLength)
+            let wordDuration = max(
+                durationPerSyllable * Double(syllables) * wordLengthFactor,
+                0.05
+            ) // Minimum duration
             let timestamp = accumulatedTime
 
-            // Add pause after punctuation
-            if word.last?.isPunctuation == true {
-                accumulatedTime += pauseDuration
-            }
-
             accumulatedTime += wordDuration
+
+            // Add pause after punctuation
+            if let lastChar = word.last, let pause = punctuationPauseDurations[lastChar] {
+                accumulatedTime += pause
+            }
 
             return WordInfo(
                 word: word,
@@ -197,11 +217,27 @@ enum InputMode {
         currentUtterance = utterance
 
         DispatchQueue.main.async {
-            self.audioStartTime = CACurrentMediaTime()
-            self.wordTrackingDisplayLink = CADisplayLink(target: self, selector: #selector(self.updateWordTracking))
+            self.wordTrackingDisplayLink = CADisplayLink(
+                target: self,
+                selector: #selector(self.updateWordTracking)
+            )
             self.wordTrackingDisplayLink?.preferredFramesPerSecond = 60
             self.wordTrackingDisplayLink?.add(to: .main, forMode: .default)
         }
+    }
+    
+    func AudioTimeStampToSeconds(_ hostTime: UInt64) -> Double {
+        var timebaseInfo = mach_timebase_info_data_t()
+        mach_timebase_info(&timebaseInfo)
+        let nanoseconds = (hostTime * UInt64(timebaseInfo.numer)) / UInt64(timebaseInfo.denom)
+        return Double(nanoseconds) / 1_000_000_000.0
+    }
+    
+    private func hostTimeToSeconds(_ hostTime: UInt64) -> Double {
+        var timebaseInfo = mach_timebase_info_data_t()
+        mach_timebase_info(&timebaseInfo)
+        let nanoseconds = (hostTime * UInt64(timebaseInfo.numer)) / UInt64(timebaseInfo.denom)
+        return Double(nanoseconds) / 1_000_000_000.0
     }
 
     @objc private func updateWordTracking() {
@@ -210,15 +246,31 @@ enum InputMode {
             return
         }
 
-        let currentTime = CACurrentMediaTime() - audioStartTime
+        // Get the current host time
+        let nowHostTime = mach_absolute_time()
 
-        // Add debug logging
-        print("Current playback time: \(currentTime)")
+        // Calculate elapsed time since audioStartTime
+        var elapsedTime = hostTimeToSeconds(nowHostTime - audioStartTime)
 
-        // Check if currentTime exceeds utterance duration
-        if currentTime >= (utterance.duration + 0.1) {
+        // Adjust for output latency if available
+        let outputLatency = audioEngine.outputNode.outputPresentationLatency
+        if outputLatency > 0 {
+            elapsedTime -= outputLatency
+        } else {
+            // Adjust for audio engine latency if output latency is not available
+            elapsedTime -= audioEngineLatency
+        }
+
+        // Debug logging
+        print("UpdateWordTracking - Current playback time: \(elapsedTime)")
+
+        // Check if elapsedTime exceeds utterance duration
+        if elapsedTime >= (utterance.duration + 0.1) {
             wordTrackingDisplayLink?.invalidate()
-            delegate?.ttsManager(self, willSpeakWord: "", atIndex: -1)
+            DispatchQueue.main.async {
+                self.delegate?.ttsManager(self, willSpeakWord: "", atIndex: -1)
+            }
+            print("UpdateWordTracking - Exceeded utterance duration. Stopping word tracking.")
             return
         }
 
@@ -226,12 +278,17 @@ enum InputMode {
         for (index, wordInfo) in utterance.wordInfos.enumerated() {
             let wordEndTime = wordInfo.timestamp + wordInfo.duration
 
-            if currentTime >= wordInfo.timestamp && currentTime < wordEndTime {
+            // Log expected vs. actual times
+            print("Expected word start time: \(wordInfo.timestamp), Current playback time: \(elapsedTime)")
+
+            if elapsedTime >= wordInfo.timestamp && elapsedTime < wordEndTime {
                 if currentWordIndex != index {
                     currentWord = wordInfo.word
                     currentWordIndex = index
                     print("🗣️ Word timing - word: \(wordInfo.word), start: \(wordInfo.timestamp), end: \(wordEndTime)")
-                    delegate?.ttsManager(self, willSpeakWord: wordInfo.word, atIndex: index)
+                    DispatchQueue.main.async {
+                        self.delegate?.ttsManager(self, willSpeakWord: wordInfo.word, atIndex: index)
+                    }
                 }
                 return
             }
@@ -245,11 +302,20 @@ enum InputMode {
         }
 
         playerNode.volume = volume
+
+        // Install audio tap to measure latency and get precise timing
+        installAudioTapIfNeeded()
+
+        // Capture the current host time
+        let startTime = mach_absolute_time()
+
+        // Schedule the buffer to play immediately
         playerNode.scheduleBuffer(buffer, at: nil, options: [], completionCallbackType: .dataPlayedBack) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
                 self.wordTrackingDisplayLink?.invalidate()
                 self.delegate?.ttsManager(self, didFinishUtterance: utterance)
+                print("Finished utterance: \(utterance.text)")
 
                 // Remove the played buffer
                 if !self.preprocessedBuffers.isEmpty {
@@ -260,6 +326,9 @@ enum InputMode {
                 if let nextBuffer = self.preprocessedBuffers.first {
                     self.delegate?.ttsManager(self, willSpeakUtterance: nextBuffer.0)
                     self.scheduleBuffer(nextBuffer.1, for: nextBuffer.0)
+                } else {
+                    // Remove audio tap when done
+                    self.removeAudioTap()
                 }
             }
         }
@@ -267,12 +336,56 @@ enum InputMode {
         if !playerNode.isPlaying {
             playerNode.play()
         }
+
+        // Set audioStartTime to the captured host time
+        audioStartTime = startTime
+        print("Audio start time set to: \(audioStartTime)")
     }
+
+    // MARK: - Audio Tap Methods
+
+    private func installAudioTapIfNeeded() {
+        // Install tap only if not already installed
+        if !isAudioTapInstalled {
+            converterNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] _, time in
+                guard let self = self else { return }
+                // Calculate audio engine latency once
+                if self.audioEngineLatency == 0.0 {
+                    if let outputTime = self.audioEngine.outputNode.lastRenderTime {
+                        // Cast sampleTime to Double before division
+                        let outputSampleTime = Double(outputTime.sampleTime)
+                        let tapSampleTime = Double(time.sampleTime)
+
+                        let latency = (outputSampleTime / outputTime.sampleRate) -
+                            (tapSampleTime / time.sampleRate)
+                        self.audioEngineLatency = latency
+                        print("Audio engine latency measured: \(self.audioEngineLatency)")
+                    }
+                }
+            }
+            isAudioTapInstalled = true
+            print("Audio tap installed.")
+        }
+    }
+
+    private func removeAudioTap() {
+        converterNode.removeTap(onBus: 0)
+        isAudioTapInstalled = false
+        audioEngineLatency = 0.0
+        print("Audio tap removed.")
+    }
+
+    private var isAudioTapInstalled: Bool = false
+
+    // MARK: - Stop, Pause, Continue
 
     func stopSpeaking() {
         // Stop word tracking
         wordTrackingDisplayLink?.invalidate()
         wordTrackingDisplayLink = nil
+
+        // Remove audio tap
+        removeAudioTap()
 
         // Reset timers and flags
         isStopRequested = true
@@ -295,20 +408,28 @@ enum InputMode {
 
         // Reset the audio engine if needed
         if !audioEngine.isRunning {
-            try? audioEngine.start()
+            do {
+                try audioEngine.start()
+            } catch {
+                print("Failed to restart audio engine: \(error)")
+            }
         }
+
+        print("Stopped speaking.")
     }
 
     func pauseSpeaking() {
         guard isSpeaking else { return }
         playerNode.pause()
         isPaused = true
+        print("Paused speaking.")
     }
 
     func continueSpeaking() {
         guard isPaused else { return }
         playerNode.play()
         isPaused = false
+        print("Continued speaking.")
     }
 
     // MARK: - Private Methods
@@ -320,10 +441,11 @@ enum InputMode {
         // Get the hardware output format
         let hwFormat = audioEngine.outputNode.outputFormat(forBus: 0)
 
-        // Create format for TTS output (22.05kHz, match hardware channels)
+        // Create format for TTS output
+        let ttsSampleRate = 22050.0 // Replace with actual sample rate if different
         let ttsFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
-            sampleRate: 22050,
+            sampleRate: ttsSampleRate,
             channels: hwFormat.channelCount,
             interleaved: false
         )!
@@ -334,6 +456,7 @@ enum InputMode {
 
         do {
             try audioEngine.start()
+            print("Audio engine started.")
         } catch {
             print("Failed to start audio engine: \(error)")
         }
@@ -458,6 +581,8 @@ enum InputMode {
 
         // Preprocess text into sentences
         let sentences = preprocessText(text)
+        print("Preprocessed sentences:")
+        sentences.forEach { print(" - \($0)") }
 
         for sentence in sentences {
             guard !isStopRequested else { break }
@@ -467,13 +592,19 @@ enum InputMode {
 
                 // Calculate utterance duration based on sample count and sample rate
                 utterance.duration = Double(buffer.frameLength) / Double(sampleRate)
+                print("Generated audio buffer for sentence: \(utterance.text)")
+                print(" - Duration: \(utterance.duration) seconds")
+                print(" - Sample Rate: \(sampleRate)")
+                print(" - Frame Length: \(buffer.frameLength)")
 
                 // Add to preprocessed buffers
                 preprocessedBuffers.append((utterance, buffer))
 
                 // If this is the first buffer, start playing
                 if preprocessedBuffers.count == 1 {
-                    delegate?.ttsManager(self, willSpeakUtterance: utterance)
+                    DispatchQueue.main.async {
+                        self.delegate?.ttsManager(self, willSpeakUtterance: utterance)
+                    }
                     scheduleBuffer(buffer, for: utterance)
                 }
             }
@@ -481,8 +612,7 @@ enum InputMode {
     }
 
     private func findOriginalSentences(processed: String, in originalText: String) -> [String] {
-        // Implementation of findOriginalSentences...
-        // Include your existing implementation here.
+        // Placeholder implementation for findOriginalSentences
         return [processed]
     }
 
