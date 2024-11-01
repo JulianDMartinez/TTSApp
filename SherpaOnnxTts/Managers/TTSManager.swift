@@ -70,10 +70,12 @@ enum InputMode {
     private var wordTrackingDisplayLink: CADisplayLink?
     private var audioStartTime: Double = 0
 
-    private let wordHighlightLeadTime: Double = 0.05 // Adjust the lead time as needed
+    private let wordHighlightLeadTime: Double = 0.00 // Adjust the lead time as needed
 
     // Add property to store original text
     private var originalText: String = ""
+
+    private var currentWordIndex: Int = 0
 
     // MARK: - Initialization
     init() {
@@ -151,12 +153,16 @@ enum InputMode {
     }
 
     private func startWordTracking(for utterance: TTSUtterance) {
+        // Clear everything when starting a new utterance
+        delegate?.ttsManager(self, willSpeakWord: "")  // This should clear with includeLineHighlights: true
+        
         print("Starting word tracking for utterance: \(utterance.text)")
         wordTrackingDisplayLink?.invalidate()
         
-        // Reset currentWord before tracking
+        // Reset currentWord and currentWordIndex before tracking
         currentWord = ""
-        print("Reset currentWord to empty string")
+        currentWordIndex = 0
+        print("Reset currentWord to empty string and currentWordIndex to 0")
         
         // Assign the current utterance
         currentUtterance = utterance
@@ -217,33 +223,36 @@ enum InputMode {
         
         // Find the current word based on timestamps
         var wordFound = false
-        for (index, wordInfo) in utterance.wordTimestamps.enumerated() {
-            let nextTimestamp = index < utterance.wordTimestamps.count - 1 ?
-                utterance.wordTimestamps[index + 1].timestamp : totalDuration
-                
+        let wordTimestamps = utterance.wordTimestamps
+
+        for index in currentWordIndex..<wordTimestamps.count {
+            let wordInfo = wordTimestamps[index]
+            let nextTimestamp = index < wordTimestamps.count - 1 ?
+                wordTimestamps[index + 1].timestamp : totalDuration
+
             print("Checking word: \(wordInfo.word), timestamp: \(wordInfo.timestamp), nextTimestamp: \(nextTimestamp)")
-            
+
             if currentTime >= wordInfo.timestamp && currentTime < nextTimestamp {
                 print("Condition met for word: \(wordInfo.word)")
                 print("currentWord: '\(currentWord)', wordInfo.word: '\(wordInfo.word)'")
-                
+
                 wordFound = true
                 if currentWord != wordInfo.word {
                     currentWord = wordInfo.word
+                    currentWordIndex = index // Update currentWordIndex
                     print("🗣️ Highlighting word: \(wordInfo.word) at time: \(currentTime)")
                     delegate?.ttsManager(self, willSpeakWord: wordInfo.word)
                 }
                 break
             }
         }
-        
-        // Handle the case where we're before the first word
-        if !wordFound {
-            let firstWord = utterance.wordTimestamps.first!.word
-            if currentWord != firstWord {
-                currentWord = firstWord
-                delegate?.ttsManager(self, willSpeakWord: firstWord)
-            }
+
+        // If no word was found and currentTime is beyond the last timestamp, clear the highlight
+        if !wordFound && currentTime > wordTimestamps.last!.timestamp {
+            currentWord = ""
+            wordTrackingDisplayLink?.invalidate()
+            delegate?.ttsManager(self, willSpeakWord: "")
+            print("No more words to highlight")
         }
     }
 

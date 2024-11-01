@@ -41,7 +41,11 @@ struct ContentView: View {
                     document: document,
                     currentPage: viewModel.currentPage,
                     currentLinesOriginal: viewModel.currentSentenceOriginals,
-                    currentWord: viewModel.currentWord
+                    currentWord: viewModel.currentWord,
+                    pdfHighlighter: PDFHighlighter(
+                        document: document,
+                        currentPageNumber: viewModel.currentPage
+                    )
                 )
                 .edgesIgnoringSafeArea(.all)
             } else {

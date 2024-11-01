@@ -22,6 +22,7 @@ class ContentViewModel {
     var isSpeaking: Bool = false
     var isPaused: Bool = false
     var currentSentenceOriginals: [String] = []
+    var pdfHighlighter: PDFHighlighter?
 
     // MARK: - TTS Manager
     var ttsManager: TTSManager
@@ -55,6 +56,10 @@ class ContentViewModel {
     func loadPDFDocument(from url: URL) {
         if let document = PDFDocument(url: url) {
             pdfDocument = document
+            pdfHighlighter = PDFHighlighter(
+                document: document,
+                currentPageNumber: currentPage
+            )
             inputMode = .pdf
             if let text = document.page(at: 0)?.string {
                 ttsManager.speak(text, pageNumber: 0)
@@ -88,18 +93,29 @@ extension ContentViewModel: TTSManagerDelegate {
         print("Processed text: \"\(utterance.text)\"")
         
         DispatchQueue.main.async {
+            // Clear previous sentence highlights before starting new utterance
+            self.pdfHighlighter?.highlightLinesInDocument(lineTexts: utterance.originalTexts)
+            
             self.currentSentenceOriginals = utterance.originalTexts.isEmpty ? [utterance.text] : utterance.originalTexts
             self.currentSentence = utterance.text
             self.currentWord = ""
             self.spokenText += utterance.text + " "
             self.isTracking = true
+            self.isSpeaking = true
+            self.isPaused = false
         }
     }
 
     func ttsManager(_ manager: TTSManager, didFinishUtterance utterance: TTSUtterance) {
         DispatchQueue.main.async {
+            // Clear highlights when utterance is finished
+            self.pdfHighlighter?.clearSentenceHighlights()
+            self.pdfHighlighter?.clearWordHighlight()
+            
             self.isTracking = false
             self.currentWord = ""
+            self.isSpeaking = false
+            self.isPaused = false
         }
     }
 
@@ -108,6 +124,7 @@ extension ContentViewModel: TTSManagerDelegate {
         
         DispatchQueue.main.async {
             self.currentWord = word
+            self.pdfHighlighter?.updateWordHighlight(word: word)
         }
     }
 }

@@ -10,35 +10,45 @@ import PDFKit
 
 struct PDFHighlighter {
     let document: PDFDocument
-    let currentPageNumber: Int
-    let highlightWord: String
+    var currentPageNumber: Int
 
-    static var currentLineAnnotations: [PDFAnnotation] = []
+    static var currentSentenceAnnotations: [PDFAnnotation] = []
     static var currentWordAnnotation: PDFAnnotation?
 
-    mutating func clearHighlights() {
+    var lastHighlightedRange: NSRange?
+
+    init(document: PDFDocument, currentPageNumber: Int) {
+        self.document = document
+        self.currentPageNumber = currentPageNumber
+    }
+
+    mutating func clearWordHighlight() {
         guard let page = document.page(at: currentPageNumber) else { return }
-
-        for annotation in PDFHighlighter.currentLineAnnotations {
-            page.removeAnnotation(annotation)
-        }
-        PDFHighlighter.currentLineAnnotations.removeAll()
-
+        
         if let wordAnnotation = PDFHighlighter.currentWordAnnotation {
             page.removeAnnotation(wordAnnotation)
             PDFHighlighter.currentWordAnnotation = nil
         }
     }
 
+    mutating func clearSentenceHighlights() {
+        guard let page = document.page(at: currentPageNumber) else { return }
+        
+        for annotation in PDFHighlighter.currentSentenceAnnotations {
+            page.removeAnnotation(annotation)
+        }
+        PDFHighlighter.currentSentenceAnnotations.removeAll()
+        lastHighlightedRange = nil
+    }
+
     /// Attempts to highlight specified lines and a word in a PDF document
     /// - Parameters:
     ///   - lineTexts: Array of text lines to highlight
-    ///   - word: Optional word to highlight within the found lines
     /// - Returns: Boolean indicating if any highlights were successfully added
-    mutating func highlightLinesInDocument(lineTexts: [String], word: String) -> Bool {
+    mutating func highlightLinesInDocument(lineTexts: [String]) -> Bool {
         guard let currentPage = document.page(at: currentPageNumber) else { return false }
 
-        clearHighlights()
+        clearSentenceHighlights()
         var didHighlightAny = false
 
         // Extract and normalize the page text
@@ -71,17 +81,9 @@ struct PDFHighlighter {
 
                         for annotation in lineAnnotations {
                             currentPage.addAnnotation(annotation)
-                            PDFHighlighter.currentLineAnnotations.append(annotation)
+                            PDFHighlighter.currentSentenceAnnotations.append(annotation)
                         }
                         didHighlightAny = true
-
-                        if !word.isEmpty {
-                            handleWordHighlighting(
-                                word: word,
-                                currentPage: currentPage,
-                                lineBounds: selection.bounds(for: currentPage)
-                            )
-                        }
                         continue
                     }
                 }
@@ -96,7 +98,17 @@ struct PDFHighlighter {
     ///   - word: The word to highlight
     ///   - currentPage: The current PDF page
     ///   - lineBounds: The bounds of the line containing the word
-    private func handleWordHighlighting(word: String, currentPage: PDFPage, lineBounds: CGRect) {
+    private mutating func handleWordHighlighting(
+        word: String,
+        currentPage: PDFPage,
+        lineBounds: CGRect? = nil
+    ) {
+        // Clear only the word highlight
+        if let wordAnnotation = PDFHighlighter.currentWordAnnotation {
+            currentPage.removeAnnotation(wordAnnotation)
+            PDFHighlighter.currentWordAnnotation = nil
+        }
+        
         let normalizedWord = word.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let wordSelections = document.findString(
@@ -104,27 +116,37 @@ struct PDFHighlighter {
             withOptions: [.caseInsensitive, .diacriticInsensitive]
         )
 
-        let matchesOnPage = wordSelections.filter { $0.pages.contains(currentPage) }
-
-        if let wordSelection = matchesOnPage
-            .first(where: { lineBounds.contains($0.bounds(for: currentPage)) }) {
-            let wordBounds = wordSelection.bounds(for: currentPage)
-
-            let wordAnnotation = RoundedHighlightAnnotation(
-                bounds: wordBounds,
-                forType: .highlight,
-                withProperties: nil
-            )
-            wordAnnotation.color = UIColor.orange.withAlphaComponent(0.3)
-            currentPage.addAnnotation(wordAnnotation)
-            PDFHighlighter.currentWordAnnotation = wordAnnotation
-        } else {
-            // Debug word positions if word not found
-            matchesOnPage.enumerated().forEach { _, selection in
-                let bounds = selection.bounds(for: currentPage)
-                // Store debug info in a log if needed
+        // Filter selections to those on the current page and after last highlighted range
+        let matchesOnPage = wordSelections.filter { selection in
+            guard selection.pages.contains(currentPage) else { return false }
+            
+            if let lastRange = lastHighlightedRange {
+                // Ensure the selection comes after the last highlighted range
+                let selectionRange = selection.range(at: 0, on: currentPage)
+                return selectionRange.location > lastRange.location
             }
+            return true
         }
+
+        guard let selection = matchesOnPage.first else {
+            print("No matches found for word: \(normalizedWord)")
+            return
+        }
+        
+        // Update lastHighlightedRange
+        lastHighlightedRange = selection.range(at: 0, on: currentPage)
+
+        // Proceed with highlighting
+        let wordBounds = selection.bounds(for: currentPage)
+
+        let wordAnnotation = RoundedHighlightAnnotation(
+            bounds: wordBounds,
+            forType: .highlight,
+            withProperties: nil
+        )
+        wordAnnotation.color = UIColor.orange.withAlphaComponent(0.3)
+        currentPage.addAnnotation(wordAnnotation)
+        PDFHighlighter.currentWordAnnotation = wordAnnotation
     }
 
     private func normalizeText(_ text: String) -> String {
@@ -271,5 +293,18 @@ struct PDFHighlighter {
               stringRange.upperBound <= originalText.endIndex else { return nil }
 
         return String(originalText[stringRange])
+    }
+
+    mutating func updateWordHighlight(word: String) {
+        guard let currentPage = document.page(at: currentPageNumber) else { return }
+
+        // Clear only the word highlight
+        clearWordHighlight()
+
+        // Proceed with highlighting the word
+        handleWordHighlighting(
+            word: word,
+            currentPage: currentPage
+        )
     }
 }
