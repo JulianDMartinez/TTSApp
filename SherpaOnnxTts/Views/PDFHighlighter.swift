@@ -381,24 +381,29 @@ struct PDFHighlighter {
         let sentenceText = String(pageContent[stringRange])
 
         let chunks = tokenizeSentenceIntoChunks(sentenceText)
+        print("🔍 Processing chunks: \(chunks)")
 
         var currentLocation = sentenceRange.location
         chunkRangesInSentence.removeAll()
 
-        for chunk in chunks {
-            let chunkLength = (chunk as NSString).length
-            let adjustedRange = NSRange(location: currentLocation, length: chunkLength)
-            chunkRangesInSentence.append(adjustedRange)
-            print("📝 Stored chunk range: \(adjustedRange) for chunk: '\(chunk)'")
-            currentLocation += chunkLength
-
-            // Move past any delimiters or whitespace
-            while currentLocation < sentenceRange.location + sentenceRange.length {
-                guard let nextChar = pageContent[pageContent.index(pageContent.startIndex, offsetBy: currentLocation)].unicodeScalars.first else { break }
-                if !CharacterSet.whitespacesAndNewlines.union(CharacterSet.punctuationCharacters).contains(nextChar) {
-                    break
+        for (index, chunk) in chunks.enumerated() {
+            // Find the exact range of this chunk in the sentence text
+            if let chunkRange = sentenceText.range(of: chunk) {
+                let chunkStart = sentenceText.distance(from: sentenceText.startIndex, to: chunkRange.lowerBound)
+                let adjustedRange = NSRange(
+                    location: sentenceRange.location + chunkStart,
+                    length: chunk.count
+                )
+                chunkRangesInSentence.append(adjustedRange)
+                print("📝 Stored chunk[\(index)] range: \(adjustedRange) for chunk: '\(chunk)'")
+                
+                // Verify the stored range
+                if let verifyRange = Range(adjustedRange, in: pageContent) {
+                    let verifyText = String(pageContent[verifyRange])
+                    print("✅ Verified chunk[\(index)]: '\(verifyText)'")
                 }
-                currentLocation += 1
+            } else {
+                print("⚠️ Could not find exact range for chunk: '\(chunk)'")
             }
         }
 
@@ -420,10 +425,9 @@ struct PDFHighlighter {
         atIndex index: Int,
         currentPage: PDFPage
     ) {
-        print("🔍 Handling chunk highlight for: '\(chunk)' at index \(index)")
+        print("\n🔍 Handling chunk highlight for: '\(chunk)' at index \(index)")
         print("📊 Available chunk ranges: \(chunkRangesInSentence.count)")
         
-        // Clear existing chunk highlights
         clearChunkHighlights()
         
         guard index >= 0, index < chunkRangesInSentence.count else {
@@ -434,8 +438,15 @@ struct PDFHighlighter {
         let chunkRange = chunkRangesInSentence[index]
         print("✨ Using chunk range: \(chunkRange)")
         
+        // Verify the chunk range before creating the selection
+        if let pageContent = currentPage.string {
+            if let stringRange = Range(chunkRange, in: pageContent) {
+                let verifyText = String(pageContent[stringRange])
+                print("✅ Verified chunk text: '\(verifyText)'")
+            }
+        }
+        
         if let selection = currentPage.selection(for: chunkRange) {
-            // Split selection into lines
             let lineSelections = selection.selectionsByLine()
             var annotations: [PDFAnnotation] = []
             
@@ -453,7 +464,6 @@ struct PDFHighlighter {
                 annotations.append(chunkAnnotation)
             }
             
-            // Store annotations for later removal
             PDFHighlighter.currentChunkAnnotations = annotations
         } else {
             print("⚠️ Could not create selection for chunk at index \(index)")
@@ -467,5 +477,17 @@ struct PDFHighlighter {
             page.removeAnnotation(annotation)
         }
         PDFHighlighter.currentChunkAnnotations.removeAll()
+    }
+
+    private func verifyChunkRanges(in pageContent: String) {
+        print("\n🔍 Verifying all chunk ranges:")
+        for (index, range) in chunkRangesInSentence.enumerated() {
+            if let stringRange = Range(range, in: pageContent) {
+                let text = String(pageContent[stringRange])
+                print("Chunk[\(index)] text: '\(text)'")
+            } else {
+                print("⚠️ Invalid range for chunk[\(index)]: \(range)")
+            }
+        }
     }
 }
