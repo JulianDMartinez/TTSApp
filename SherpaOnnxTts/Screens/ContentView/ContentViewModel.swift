@@ -119,12 +119,12 @@ extension ContentViewModel: TTSManagerDelegate {
         }
     }
 
-    func ttsManager(_ manager: TTSManager, willSpeakWord word: String) {
-        print("\n🗣️ Will speak word: \"\(word)\"")
+    func ttsManager(_ manager: TTSManager, willSpeakWord word: String, atIndex index: Int) {
+        print("\n🗣️ Will speak word: \"\(word)\" at index \(index)")
         
         DispatchQueue.main.async {
             self.currentWord = word
-            self.pdfHighlighter?.updateWordHighlight(word: word)
+            self.pdfHighlighter?.updateWordHighlight(word: word, atIndex: index)
         }
     }
 }

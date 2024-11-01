@@ -154,7 +154,7 @@ enum InputMode {
 
     private func startWordTracking(for utterance: TTSUtterance) {
         // Clear everything when starting a new utterance
-        delegate?.ttsManager(self, willSpeakWord: "")  // This should clear with includeLineHighlights: true
+        delegate?.ttsManager(self, willSpeakWord: "", atIndex: -1)  // Clear highlight with -1 index
         
         print("Starting word tracking for utterance: \(utterance.text)")
         wordTrackingDisplayLink?.invalidate()
@@ -217,7 +217,7 @@ enum InputMode {
         if currentTime >= totalDuration {
             print("Exceeded total duration: \(totalDuration)")
             wordTrackingDisplayLink?.invalidate()
-            delegate?.ttsManager(self, willSpeakWord: "")  // Clear highlight
+            delegate?.ttsManager(self, willSpeakWord: "", atIndex: -1)  // Use -1 to indicate no word
             return
         }
         
@@ -241,7 +241,7 @@ enum InputMode {
                     currentWord = wordInfo.word
                     currentWordIndex = index // Update currentWordIndex
                     print("🗣️ Highlighting word: \(wordInfo.word) at time: \(currentTime)")
-                    delegate?.ttsManager(self, willSpeakWord: wordInfo.word)
+                    delegate?.ttsManager(self, willSpeakWord: wordInfo.word, atIndex: index)
                 }
                 break
             }
@@ -251,7 +251,7 @@ enum InputMode {
         if !wordFound && currentTime > wordTimestamps.last!.timestamp {
             currentWord = ""
             wordTrackingDisplayLink?.invalidate()
-            delegate?.ttsManager(self, willSpeakWord: "")
+            delegate?.ttsManager(self, willSpeakWord: "", atIndex: -1)
             print("No more words to highlight")
         }
     }
@@ -693,5 +693,5 @@ enum InputMode {
 protocol TTSManagerDelegate: AnyObject {
     func ttsManager(_ manager: TTSManager, didFinishUtterance utterance: TTSUtterance)
     func ttsManager(_ manager: TTSManager, willSpeakUtterance utterance: TTSUtterance)
-    func ttsManager(_ manager: TTSManager, willSpeakWord word: String)
+    func ttsManager(_ manager: TTSManager, willSpeakWord word: String, atIndex index: Int)
 }

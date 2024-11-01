@@ -7,6 +7,7 @@
 
 import Foundation
 import PDFKit
+import NaturalLanguage
 
 struct PDFHighlighter {
     let document: PDFDocument
@@ -19,6 +20,9 @@ struct PDFHighlighter {
 
     // Add new property to track current sentence bounds
     private var currentSentenceBounds: CGRect?
+
+    // Add new property to store word ranges
+    private var wordRangesInSentence: [NSRange] = []
 
     init(document: PDFDocument, currentPageNumber: Int) {
         self.document = document
@@ -88,6 +92,12 @@ struct PDFHighlighter {
                             PDFHighlighter.currentSentenceAnnotations.append(annotation)
                         }
                         didHighlightAny = true
+                        
+                        // Store the word ranges in the sentence
+                        storeWordRangesInSentence(
+                            sentenceRange: originalRange,
+                            pageContent: pageContent
+                        )
                         continue
                     }
                 }
@@ -113,53 +123,37 @@ struct PDFHighlighter {
     ///   - lineBounds: The bounds of the line containing the word
     private mutating func handleWordHighlighting(
         word: String,
-        currentPage: PDFPage,
-        lineBounds: CGRect? = nil
+        atIndex index: Int,
+        currentPage: PDFPage
     ) {
-        print("🔍 Handling word highlight for: '\(word)'")
+        print("🔍 Handling word highlight for: '\(word)' at index \(index)")
+        print("📊 Available word ranges: \(wordRangesInSentence.count)")
         
         clearWordHighlight()
         
-        let normalizedWord = word.trimmingCharacters(in: .whitespacesAndNewlines)
-        print("📝 Normalized word: '\(normalizedWord)'")
-
-        let wordSelections = document.findString(
-            normalizedWord,
-            withOptions: [.caseInsensitive, .diacriticInsensitive]
-        )
-
-        // Filter selections to those within the current sentence bounds
-        let matchesInSentence = wordSelections.filter { selection in
-            guard selection.pages.contains(currentPage),
-                  let sentenceBounds = currentSentenceBounds else { 
-                print("⚠️ No sentence bounds available")
-                return false 
-            }
-            
-            let wordBounds = selection.bounds(for: currentPage)
-            // Use intersects instead of contains for more flexible matching
-            let isInSentence = wordBounds.intersects(sentenceBounds)
-            print("📍 Word bounds: \(wordBounds), sentence bounds: \(sentenceBounds), intersects: \(isInSentence)")
-            return isInSentence
-        }
-
-        guard let selection = matchesInSentence.first else {
-            print("⚠️ No matches found for word: '\(normalizedWord)' in current sentence")
+        guard index >= 0, index < wordRangesInSentence.count else {
+            print("⚠️ Word index \(index) out of bounds (available ranges: 0...\(wordRangesInSentence.count - 1))")
             return
         }
-
-        // Create and add the word annotation
-        let wordBounds = selection.bounds(for: currentPage)
-        print("✨ Creating word highlight at bounds: \(wordBounds)")
         
-        let wordAnnotation = RoundedHighlightAnnotation(
-            bounds: wordBounds,
-            forType: .highlight,
-            withProperties: nil
-        )
-        wordAnnotation.color = UIColor.orange.withAlphaComponent(0.3)
-        currentPage.addAnnotation(wordAnnotation)
-        PDFHighlighter.currentWordAnnotation = wordAnnotation
+        let wordRange = wordRangesInSentence[index]
+        print("✨ Using word range: \(wordRange)")
+        
+        if let selection = currentPage.selection(for: wordRange) {
+            let wordBounds = selection.bounds(for: currentPage)
+            print("✨ Creating word highlight at bounds: \(wordBounds)")
+            
+            let wordAnnotation = RoundedHighlightAnnotation(
+                bounds: wordBounds,
+                forType: .highlight,
+                withProperties: nil
+            )
+            wordAnnotation.color = UIColor.orange.withAlphaComponent(0.3)
+            currentPage.addAnnotation(wordAnnotation)
+            PDFHighlighter.currentWordAnnotation = wordAnnotation
+        } else {
+            print("⚠️ Could not create selection for word at index \(index)")
+        }
     }
 
     private func normalizeText(_ text: String) -> String {
@@ -308,15 +302,12 @@ struct PDFHighlighter {
         return String(originalText[stringRange])
     }
 
-    mutating func updateWordHighlight(word: String) {
+    mutating func updateWordHighlight(word: String, atIndex index: Int) {
         guard let currentPage = document.page(at: currentPageNumber) else { return }
-
-        // Clear only the word highlight
         clearWordHighlight()
-
-        // Proceed with highlighting the word
         handleWordHighlighting(
             word: word,
+            atIndex: index,
             currentPage: currentPage
         )
     }
@@ -338,5 +329,34 @@ struct PDFHighlighter {
         } else {
             print("⚠️ No sentence bounds set")
         }
+    }
+
+    private mutating func storeWordRangesInSentence(
+        sentenceRange: NSRange,
+        pageContent: String
+    ) {
+        guard let stringRange = Range(sentenceRange, in: pageContent) else { return }
+        let sentenceText = String(pageContent[stringRange])
+        
+        let tokenizer = NLTokenizer(unit: .word)
+        tokenizer.string = sentenceText
+        wordRangesInSentence.removeAll()
+        
+        // Enumerate through each word token and calculate its range
+        tokenizer.enumerateTokens(in: sentenceText.startIndex..<sentenceText.endIndex) { tokenRange, _ in
+            // Convert the token range to NSRange relative to the sentence text
+            let nsRange = NSRange(tokenRange, in: sentenceText) 
+            
+            // Adjust the range to be relative to the page content
+            let adjustedRange = NSRange(
+                location: sentenceRange.location + nsRange.location,
+                length: nsRange.length
+            )
+            wordRangesInSentence.append(adjustedRange)
+            print("📝 Stored word range: \(adjustedRange) for word: '\(sentenceText[tokenRange])'")
+            return true
+        }
+        
+        print("📚 Total word ranges stored: \(wordRangesInSentence.count)")
     }
 }
