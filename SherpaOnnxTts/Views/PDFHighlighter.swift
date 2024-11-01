@@ -379,20 +379,29 @@ struct PDFHighlighter {
     ) {
         guard let stringRange = Range(sentenceRange, in: pageContent) else { return }
         let sentenceText = String(pageContent[stringRange])
-        
+
         let chunks = tokenizeSentenceIntoChunks(sentenceText)
-        
+
         var currentLocation = sentenceRange.location
         chunkRangesInSentence.removeAll()
-        
+
         for chunk in chunks {
             let chunkLength = (chunk as NSString).length
             let adjustedRange = NSRange(location: currentLocation, length: chunkLength)
             chunkRangesInSentence.append(adjustedRange)
             print("📝 Stored chunk range: \(adjustedRange) for chunk: '\(chunk)'")
-            currentLocation += chunkLength + 1 // +1 for the delimiter
+            currentLocation += chunkLength
+
+            // Move past any delimiters or whitespace
+            while currentLocation < sentenceRange.location + sentenceRange.length {
+                guard let nextChar = pageContent[pageContent.index(pageContent.startIndex, offsetBy: currentLocation)].unicodeScalars.first else { break }
+                if !CharacterSet.whitespacesAndNewlines.union(CharacterSet.punctuationCharacters).contains(nextChar) {
+                    break
+                }
+                currentLocation += 1
+            }
         }
-        
+
         print("📚 Total chunk ranges stored: \(chunkRangesInSentence.count)")
     }
 

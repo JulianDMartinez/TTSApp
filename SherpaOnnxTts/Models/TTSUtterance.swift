@@ -40,25 +40,46 @@ class TTSUtterance {
 }
 
 func tokenizeSentenceIntoChunks(_ sentence: String) -> [String] {
-    // Split the sentence into words
-    let words = sentence.components(separatedBy: .whitespacesAndNewlines)
-        .filter { !$0.isEmpty }
-    
+    // Define a list of punctuation marks and conjunctions that often correspond to pauses
+    let pauseIndicators = [",", ";", ":", ".", "!", "?", "—", "–", "…", "and", "but", "or", "so", "because", "however", "therefore", "although"]
+
+    // Escape special regex characters in pause indicators
+    let escapedPauseIndicators = pauseIndicators.map { NSRegularExpression.escapedPattern(for: $0) }
+
+    // Create a pattern to match these indicators
+    let pattern = "\\b(?:\(escapedPauseIndicators.joined(separator: "|")))(?=\\s)|(?<=\\s)(?:\(escapedPauseIndicators.joined(separator: "|")))\\b|[.,;:!?—–…]"
+
+    // Compile the regex safely
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+        print("⚠️ Invalid regex pattern: \(pattern)")
+        return [sentence] // Return the whole sentence if regex fails
+    }
+
+    let nsSentence = sentence as NSString
+    let matches = regex.matches(in: sentence, options: [], range: NSRange(location: 0, length: nsSentence.length))
+
     var chunks: [String] = []
-    var currentChunk = ""
-    let maxWordsPerChunk = 5 // Adjust as needed
-    
-    for word in words {
-        currentChunk += currentChunk.isEmpty ? word : " \(word)"
-        if currentChunk.components(separatedBy: .whitespaces).count >= maxWordsPerChunk {
-            chunks.append(currentChunk)
-            currentChunk = ""
+    var lastIndex = 0
+
+    for match in matches {
+        let range = NSRange(location: lastIndex, length: match.range.location - lastIndex)
+        if range.length > 0 {
+            let chunk = nsSentence.substring(with: range).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !chunk.isEmpty {
+                chunks.append(chunk)
+            }
+        }
+        lastIndex = match.range.location + match.range.length
+    }
+
+    // Add any remaining text as a chunk
+    if lastIndex < nsSentence.length {
+        let range = NSRange(location: lastIndex, length: nsSentence.length - lastIndex)
+        let chunk = nsSentence.substring(with: range).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !chunk.isEmpty {
+            chunks.append(chunk)
         }
     }
-    
-    if !currentChunk.isEmpty {
-        chunks.append(currentChunk)
-    }
-    
+
     return chunks
 }
