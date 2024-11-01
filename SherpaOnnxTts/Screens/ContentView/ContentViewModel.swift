@@ -93,8 +93,8 @@ extension ContentViewModel: TTSManagerDelegate {
         print("Processed text: \"\(utterance.text)\"")
         
         DispatchQueue.main.async {
-            // Clear previous sentence highlights before starting new utterance
-            self.pdfHighlighter?.highlightLinesInDocument(lineTexts: utterance.originalTexts)
+            // Store the result of highlightLinesInDocument
+            let _ = self.pdfHighlighter?.highlightLinesInDocument(lineTexts: utterance.originalTexts)
             
             self.currentSentenceOriginals = utterance.originalTexts.isEmpty ? [utterance.text] : utterance.originalTexts
             self.currentSentence = utterance.text

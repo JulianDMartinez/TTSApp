@@ -68,9 +68,8 @@ enum InputMode {
 
     // Add new properties
     private var wordTrackingDisplayLink: CADisplayLink?
-    private var audioStartTime: Double = 0
 
-    private let wordHighlightLeadTime: Double = 0.00 // Adjust the lead time as needed
+    private let wordHighlightLeadTime: Double = 0.05 // 50ms lead time
 
     // Add property to store original text
     private var originalText: String = ""
@@ -153,45 +152,51 @@ enum InputMode {
     }
 
     private func startWordTracking(for utterance: TTSUtterance) {
-        // Clear everything when starting a new utterance
-        delegate?.ttsManager(self, willSpeakWord: "", atIndex: -1)  // Clear highlight with -1 index
+        delegate?.ttsManager(self, willSpeakWord: "", atIndex: -1)
         
         print("Starting word tracking for utterance: \(utterance.text)")
         wordTrackingDisplayLink?.invalidate()
         
-        // Reset currentWord and currentWordIndex before tracking
         currentWord = ""
         currentWordIndex = 0
-        print("Reset currentWord to empty string and currentWordIndex to 0")
         
-        // Assign the current utterance
-        currentUtterance = utterance
-        print("Assigned currentUtterance: \(currentUtterance?.text ?? "nil")")
+        // Calculate syllable-based timing with improved accuracy
+        let totalSyllables = utterance.words.reduce(0) { $0 + syllableCount(for: $1) }
+        let durationPerSyllable = utterance.duration / Double(max(totalSyllables, 1))
         
-        // Calculate timestamps for each word
-        let totalDuration = utterance.duration
-        let wordCount = Double(utterance.words.count)
-        
-        // Calculate timestamps with more natural spacing
         var accumulatedTime: Double = 0.0
-        utterance.wordTimestamps = utterance.words.map { word in
-            let baseDuration = totalDuration / wordCount
-            // Adjust duration based on word length (longer words take more time)
-            let lengthFactor = Double(word.count) / 5.0 // Assuming average word length is 5 characters
-            let adjustedDuration = baseDuration * max(0.5, min(1.5, lengthFactor))
-            
+        let pauseDuration: Double = 0.15 // Slightly reduced pause duration
+        
+        // Create word infos with timing
+        utterance.wordInfos = utterance.words.map { word in
+            let syllables = syllableCount(for: word)
+            let wordDuration = max(durationPerSyllable * Double(syllables), 0.05) // Minimum duration
             let timestamp = accumulatedTime
-            accumulatedTime += adjustedDuration
             
-            return (word: word, timestamp: max(0, timestamp - wordHighlightLeadTime))
+            // Add pause after punctuation
+            if word.last?.isPunctuation == true {
+                accumulatedTime += pauseDuration
+            }
+            
+            accumulatedTime += wordDuration
+            
+            return WordInfo(
+                word: word,
+                timestamp: max(0, timestamp - wordHighlightLeadTime),
+                duration: wordDuration,
+                syllableCount: syllables
+            )
         }
         
-        print("Word timestamps: \(utterance.wordTimestamps)")
+        // Debug log word timings
+        print("Word timing breakdown:")
+        utterance.wordInfos.forEach { info in
+            print("Word: \(info.word), Start: \(info.timestamp), Duration: \(info.duration)")
+        }
         
-        // Ensure we're on the main thread
+        currentUtterance = utterance
+        
         DispatchQueue.main.async {
-            self.audioStartTime = CACurrentMediaTime()
-            
             self.wordTrackingDisplayLink = CADisplayLink(target: self, selector: #selector(self.updateWordTracking))
             self.wordTrackingDisplayLink?.preferredFramesPerSecond = 60
             self.wordTrackingDisplayLink?.add(to: .main, forMode: .default)
@@ -199,60 +204,38 @@ enum InputMode {
     }
 
     @objc private func updateWordTracking() {
-        print("Updating word tracking")
-        
         guard let utterance = currentUtterance,
-              !utterance.wordTimestamps.isEmpty else {
-            print("No current utterance or empty timestamps")
+              let nodeTime = playerNode.lastRenderTime,
+              let playerTime = playerNode.playerTime(forNodeTime: nodeTime) else {
             wordTrackingDisplayLink?.invalidate()
             return
         }
         
-        let currentTime = CACurrentMediaTime() - audioStartTime
-        print("Current time: \(currentTime)")
+        let currentTime = Double(playerTime.sampleTime) / playerTime.sampleRate
         
-        let totalDuration = utterance.duration
+        // Add debug logging
+        print("Current playback time: \(currentTime)")
         
-        // Ensure we don't exceed the total duration
-        if currentTime >= totalDuration {
-            print("Exceeded total duration: \(totalDuration)")
-            wordTrackingDisplayLink?.invalidate()
-            delegate?.ttsManager(self, willSpeakWord: "", atIndex: -1)  // Use -1 to indicate no word
-            return
-        }
-        
-        // Find the current word based on timestamps
-        var wordFound = false
-        let wordTimestamps = utterance.wordTimestamps
-
-        for index in currentWordIndex..<wordTimestamps.count {
-            let wordInfo = wordTimestamps[index]
-            let nextTimestamp = index < wordTimestamps.count - 1 ?
-                wordTimestamps[index + 1].timestamp : totalDuration
-
-            print("Checking word: \(wordInfo.word), timestamp: \(wordInfo.timestamp), nextTimestamp: \(nextTimestamp)")
-
-            if currentTime >= wordInfo.timestamp && currentTime < nextTimestamp {
-                print("Condition met for word: \(wordInfo.word)")
-                print("currentWord: '\(currentWord)', wordInfo.word: '\(wordInfo.word)'")
-
-                wordFound = true
-                if currentWord != wordInfo.word {
-                    currentWord = wordInfo.word
-                    currentWordIndex = index // Update currentWordIndex
-                    print("🗣️ Highlighting word: \(wordInfo.word) at time: \(currentTime)")
-                    delegate?.ttsManager(self, willSpeakWord: wordInfo.word, atIndex: index)
-                }
-                break
-            }
-        }
-
-        // If no word was found and currentTime is beyond the last timestamp, clear the highlight
-        if !wordFound && currentTime > wordTimestamps.last!.timestamp {
-            currentWord = ""
+        // Check if currentTime exceeds utterance duration (with a small buffer)
+        if currentTime >= (utterance.duration + 0.1) {
             wordTrackingDisplayLink?.invalidate()
             delegate?.ttsManager(self, willSpeakWord: "", atIndex: -1)
-            print("No more words to highlight")
+            return
+        }
+        
+        // Find the current word based on timing
+        for (index, wordInfo) in utterance.wordInfos.enumerated() {
+            let wordEndTime = wordInfo.timestamp + wordInfo.duration
+            
+            if currentTime >= wordInfo.timestamp && currentTime < wordEndTime {
+                if currentWordIndex != index {
+                    currentWord = wordInfo.word
+                    currentWordIndex = index
+                    print("🗣️ Word timing - word: \(wordInfo.word), start: \(wordInfo.timestamp), end: \(wordEndTime)")
+                    delegate?.ttsManager(self, willSpeakWord: wordInfo.word, atIndex: index)
+                }
+                return
+            }
         }
     }
 
@@ -479,7 +462,6 @@ enum InputMode {
 
         // Split original text into sentences with word boundaries
         let sentenceTokenizer = NLTokenizer(unit: .sentence)
-        let wordTokenizer = NLTokenizer(unit: .word)
         sentenceTokenizer.string = originalText
 
         var bestMatch: (sentences: [String], score: Double) = ([], 0.0)
@@ -602,23 +584,17 @@ enum InputMode {
 
     private func preprocessUtterance(_ sentence: String, pageNumber: Int?) async -> TTSUtterance? {
         guard !isStopRequested else { return nil }
-
-        // Find original sentences in PDF text
+        
         let originalSentences = findOriginalSentences(
             processed: sentence,
             in: originalText
         )
-
-        print("Found original sentences: \(originalSentences)")
-
-        // Create utterance with original and processed text
-        let utterance = TTSUtterance(
+        
+        return TTSUtterance(
             originalTexts: originalSentences.isEmpty ? [sentence] : originalSentences,
             processedText: sentence,
             pageNumber: pageNumber
         )
-
-        return utterance
     }
 
     private func processText(_ text: String, pageNumber: Int?) async {
@@ -664,17 +640,10 @@ enum InputMode {
                 }
 
                 // Calculate utterance duration based on sample count and sample rate
-                utterance.duration = Double(audio.samples.count) / 22050.0 // Using known sample rate
+                utterance.duration = Double(audio.samples.count) / Double(audio.sampleRate)
 
-                // Calculate word timings
-                let wordsCount = Double(utterance.words.count)
-                let timePerWord = utterance.duration / wordsCount
-
-                // Create timestamps for each word
-                utterance.wordTimestamps = utterance.words.enumerated().map { index, word in
-                    let timestamp = timePerWord * Double(index)
-                    return (word: word, timestamp: max(0, timestamp))
-                }
+                // Remove wordTimestamps
+                // No need for wordTimestamps; rely solely on wordInfos in startWordTracking
 
                 // Add to preprocessed buffers
                 preprocessedBuffers.append((utterance, buffer))
@@ -686,6 +655,31 @@ enum InputMode {
                 }
             }
         }
+    }
+
+    private func syllableCount(for word: String) -> Int {
+        let vowels = "aeiouy"
+        let word = word.lowercased()
+        var count = 0
+        var lastWasVowel = false
+        
+        for char in word {
+            if vowels.contains(char) {
+                if !lastWasVowel {
+                    count += 1
+                    lastWasVowel = true
+                }
+            } else {
+                lastWasVowel = false
+            }
+        }
+        
+        // Adjust for silent 'e' at the end
+        if word.hasSuffix("e") {
+            count = max(count - 1, 1)
+        }
+        
+        return max(count, 1)
     }
 }
 
